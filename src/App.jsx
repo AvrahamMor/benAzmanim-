@@ -1,6 +1,6 @@
 import html2canvas from 'html2canvas';
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Calendar, Clock, User, Briefcase, Trash2, Users, LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, Download } from 'lucide-react';
+import { AlertCircle, Calendar, Clock, User, Briefcase, Trash2, Users, LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, Download, History } from 'lucide-react';
 import initialSchedule from './schedule.json';
 import initialStaff from './staff.json';
 import './App.css';
@@ -64,6 +64,16 @@ function App() {
 
   // Shifts state
   const [shifts, setShifts] = useState(initialSchedule);
+  const [archives, setArchives] = useState([]);
+  const [selectedArchiveWeek, setSelectedArchiveWeek] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/get-archives')
+      .then(res => res.json())
+      .then(data => setArchives(data))
+      .catch(err => console.error('Failed to load archives:', err));
+  }, []);
+
 
   // Sync state when JSON files update (e.g. from AI editing)
   useEffect(() => {
@@ -266,6 +276,55 @@ function App() {
     }
   };
 
+  const archiveAndResetWeek = async () => {
+    const today = new Date();
+    const defaultName = `שבוע ${today.toLocaleDateString('he-IL')}`;
+    const weekName = prompt('הכנס שם לשבוע הנוכחי (לשמירה בארכיון):', defaultName);
+    if (!weekName) return; // User cancelled
+
+    const archiveData = {
+      id: Date.now(),
+      name: weekName,
+      date: today.toISOString(),
+      shifts: shifts
+    };
+
+    try {
+      await fetch('/api/archive-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(archiveData)
+      });
+      
+      setArchives(prev => [...prev, archiveData]);
+
+      const newShifts = JSON.parse(JSON.stringify(shifts));
+      CATEGORIES.forEach(cat => {
+        DAYS.forEach(day => {
+          if (newShifts[cat] && newShifts[cat][day]) {
+            newShifts[cat][day] = newShifts[cat][day].map(slot => ({
+              ...slot,
+              employee: '',
+              role: ''
+            }));
+          }
+        });
+      });
+
+      setShifts(newShifts);
+      await fetch('/api/save-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newShifts)
+      });
+      
+      alert('השבוע נשמר בארכיון בהצלחה והלוח אופס לקראת השבוע החדש!');
+    } catch (err) {
+      console.error('Failed to archive week:', err);
+      alert('אירעה שגיאה בשמירת השבוע בארכיון');
+    }
+  };
+
   const copyDataToAI = () => {
     const dataStr = JSON.stringify(staffList, null, 2);
     navigator.clipboard.writeText(dataStr).then(() => {
@@ -461,6 +520,13 @@ function App() {
       <User size={20} />
       <span>לו"ז עובד אישי</span>
     </button>
+          <button 
+            className={`nav-item ${currentView === 'archives' ? 'active' : ''}`}
+            onClick={() => { setCurrentView('archives'); setSelectedArchiveWeek(null); }}
+          >
+            <History size={20} />
+            <span>ארכיון שבועות</span>
+          </button>
     <div className="nav-divider">מחלקות</div>
           
           {CATEGORIES.map(cat => (
@@ -552,6 +618,9 @@ function App() {
               </div>
 
               <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <button onClick={archiveAndResetWeek} className="btn-primary" style={{ background: '#ef4444', padding: '10px 20px', fontSize: '1rem', fontWeight: 'bold' }}>
+                  <History size={18} /> סגור שבוע נוכחי והתחל חדש
+                </button>
                 <button onClick={saveData} className="btn-primary" style={{ background: '#10b981', padding: '10px 20px', fontSize: '1rem' }}>
                   <Save size={18} /> שמור נתונים זמנית (בדפדפן)
                 </button>
@@ -653,8 +722,17 @@ function App() {
                   <tbody>
                     {/* Morning Section */}
                     <tr className="shift-section-header">
-                      <td colSpan={DAYS.length + 1} style={{ textAlign: 'center', background: 'var(--primary-light)', color: 'var(--primary-color)', padding: '12px', fontWeight: 'bold', fontSize: '1.2rem' }}>
+                      <td colSpan={DAYS.length + 1} style={{ textAlign: 'center', background: 'var(--primary-light)', color: 'var(--primary-color)', padding: '12px', fontWeight: 'bold', fontSize: '1.2rem', position: 'relative' }}>
                         ☀️ משמרת בוקר
+                        <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
+                          <button 
+                            onClick={() => addRow(currentView, 'morning')}
+                            title="הוסף שורת בוקר"
+                            style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem' }}
+                          >
+                            <Plus size={16} /> הוסף בוקר
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     {getProcessedShifts() && Array.from({ length: getProcessedShifts().maxMorning }).map((_, rowIndex) => {
@@ -756,8 +834,17 @@ function App() {
 
                     {/* Evening Section */}
                     <tr className="shift-section-header">
-                      <td colSpan={DAYS.length + 1} style={{ textAlign: 'center', background: '#374151', color: '#e5e7eb', padding: '12px', fontWeight: 'bold', fontSize: '1.2rem' }}>
+                      <td colSpan={DAYS.length + 1} style={{ textAlign: 'center', background: '#374151', color: '#e5e7eb', padding: '12px', fontWeight: 'bold', fontSize: '1.2rem', position: 'relative' }}>
                         🌙 משמרת ערב
+                        <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
+                          <button 
+                            onClick={() => addRow(currentView, 'evening')}
+                            title="הוסף שורת ערב"
+                            style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem' }}
+                          >
+                            <Plus size={16} /> הוסף ערב
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     {getProcessedShifts() && Array.from({ length: getProcessedShifts().maxEvening }).map((_, rowIndex) => {
@@ -981,6 +1068,89 @@ function App() {
           {PREDEFINED_ROLES.map((r, i) => <option key={i} value={r} />)}
         </datalist>
 
+              {currentView === 'archives' && (
+          <div className="archives-view">
+            <div className="view-header">
+              <div>
+                <h1>ארכיון שבועות</h1>
+                <p>צפה בהיסטוריית סידורי עבודה קודמים</p>
+              </div>
+            </div>
+
+            {!selectedArchiveWeek ? (
+              <div className="archives-list" style={{ display: 'grid', gap: '15px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+                {archives.length === 0 ? (
+                  <div className="empty-state">לא נמצאו שבועות בארכיון.</div>
+                ) : (
+                  archives.map(arch => (
+                    <div key={arch.id} className="stat-card" style={{ cursor: 'pointer', border: '1px solid var(--border-color)' }} onClick={() => setSelectedArchiveWeek(arch)}>
+                      <div className="stat-icon" style={{ background: '#3b82f6' }}><History size={24} /></div>
+                      <div className="stat-details">
+                        <h3>{arch.name}</h3>
+                        <p style={{ color: 'var(--text-secondary)' }}>{new Date(arch.date).toLocaleDateString('he-IL')}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="archive-detail-view">
+                <button className="btn-primary" onClick={() => setSelectedArchiveWeek(null)} style={{ marginBottom: '20px', background: '#6b7280' }}>
+                  חזור לרשימת הארכיון
+                </button>
+                <h2>מציג: {selectedArchiveWeek.name}</h2>
+                
+                {CATEGORIES.map(category => (
+                  <div key={category} style={{ marginBottom: '40px' }}>
+                    <h3 style={{ borderBottom: '2px solid var(--primary-color)', paddingBottom: '10px', marginBottom: '20px' }}>{category}</h3>
+                    <div className="table-wrapper">
+                      <table className="schedule-matrix" style={{ opacity: 0.9 }}>
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            {DAYS.map(day => <th key={day}>{day}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Array.from({ length: 16 }).map((_, rowIndex) => {
+                            let hasDataInRow = false;
+                            const rowCells = DAYS.map(day => {
+                              const slots = selectedArchiveWeek.shifts[category][day] || [];
+                              const slot = slots[rowIndex];
+                              if (slot && (slot.employee || slot.role)) hasDataInRow = true;
+                              return { day, slot };
+                            });
+                            
+                            if (!hasDataInRow) return null;
+
+                            return (
+                              <tr key={rowIndex}>
+                                <td className="slot-num-cell">{rowIndex + 1}</td>
+                                {rowCells.map(({ day, slot }) => (
+                                  <td key={day} className={`matrix-cell ${slot && (slot.employee || slot.role) ? 'active-cell' : ''}`}>
+                                    {slot && (slot.employee || slot.role) ? (
+                                      <div className="cell-content" style={{ pointerEvents: 'none' }}>
+                                        <div className="cell-row" style={{ fontWeight: 'bold' }}>{slot.employee || '-'}</div>
+                                        <div className="cell-row" style={{ color: 'var(--text-secondary)', fontSize: '0.85em' }}>{slot.role || '-'}</div>
+                                        <div className="cell-row" style={{ fontSize: '0.8em' }}>{slot.start} - {slot.end}</div>
+                                      </div>
+                                    ) : (
+                                      <div className="empty-cell"></div>
+                                    )}
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
