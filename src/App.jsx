@@ -1,11 +1,11 @@
 import html2canvas from 'html2canvas';
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Calendar, Clock, User, Briefcase, Trash2, Users, LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, Download, History, ChefHat, CheckCircle } from 'lucide-react';
+import { AlertCircle, Calendar, Clock, User, Briefcase, Trash2, Users, LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, Download, History, ChefHat, CheckCircle, UserCheck } from 'lucide-react';
 import initialSchedule from './schedule.json';
 import initialStaff from './staff.json';
 import './App.css';
 
-const CATEGORIES = ['בייגל', 'יריד אוכל מוכן', 'מסעדה', 'מטבח'];
+const CATEGORIES = ['בייגל', 'יריד אוכל מוכן', 'מסעדה', 'מטבח', 'מארחות'];
 const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'מוצ"ש'];
 
 // Helper to parse HH:MM into minutes from midnight
@@ -89,13 +89,33 @@ function App() {
   const PREDEFINED_ROLES = [
     'מנהל משמרת',
     'אחראי קופה',
+    'מארחת',
     'פס חם',
     'פס קר',
     'מילוי אוכל'
   ];
 
+  const ensureCategoriesExist = (scheduleData) => {
+    if (!scheduleData) return {};
+    const updated = { ...scheduleData };
+    CATEGORIES.forEach(cat => {
+      if (!updated[cat]) {
+        updated[cat] = {
+          "ראשון": [],
+          "שני": [],
+          "שלישי": [],
+          "רביעי": [],
+          "חמישי": [],
+          "שישי": [],
+          "מוצ\"ש": []
+        };
+      }
+    });
+    return updated;
+  };
+
   // Shifts state
-  const [shifts, setShifts] = useState(initialSchedule);
+  const [shifts, setShifts] = useState(() => ensureCategoriesExist(initialSchedule));
   const [archives, setArchives] = useState([]);
   const [selectedArchiveWeek, setSelectedArchiveWeek] = useState(null);
   const [selectedPersonalWeekId, setSelectedPersonalWeekId] = useState('current');
@@ -109,7 +129,7 @@ function App() {
 
   // Sync state when JSON files update
   useEffect(() => {
-    setShifts(initialSchedule);
+    setShifts(ensureCategoriesExist(initialSchedule));
   }, [initialSchedule]);
 
   useEffect(() => {
@@ -417,6 +437,7 @@ function App() {
     if (cat === 'יריד אוכל מוכן') return <Store size={18} />;
     if (cat === 'מסעדה') return <Utensils size={18} />;
     if (cat === 'מטבח') return <ChefHat size={18} />;
+    if (cat === 'מארחות') return <UserCheck size={18} />;
     return <Calendar size={18} />;
   };
 
