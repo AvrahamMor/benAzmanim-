@@ -1,6 +1,6 @@
 import html2canvas from 'html2canvas';
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Calendar, Clock, User, Briefcase, Trash2, Users, LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, Download, History, ChefHat, CheckCircle, UserCheck } from 'lucide-react';
+import { AlertCircle, Calendar, Clock, User, Briefcase, Trash2, Users, LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, Download, History, ChefHat, CheckCircle, UserCheck, Flame } from 'lucide-react';
 import initialSchedule from './schedule.json';
 import initialStaff from './staff.json';
 import './App.css';
@@ -558,19 +558,25 @@ function App() {
     ? shifts 
     : (archives.find(a => String(a.id) === String(selectedPersonalWeekId))?.shifts || shifts);
 
-  // Compute total hours & shift count for selected employee
+  // Compute total hours, shift count & double shifts count for selected employee
   let totalEmployeeHours = 0;
   let totalEmployeeShiftsCount = 0;
+  let totalDoubleShiftsCount = 0;
   if (selectedEmployeeForPersonal) {
     DAYS.forEach(day => {
+      let dayCount = 0;
       CATEGORIES.forEach(cat => {
         (activeShiftsForPersonal[cat]?.[day] || []).forEach(shift => {
           if (shift.employee && shift.employee.trim() === selectedEmployeeForPersonal) {
             totalEmployeeShiftsCount++;
+            dayCount++;
             totalEmployeeHours += getShiftDurationHours(shift.start, shift.end);
           }
         });
       });
+      if (dayCount > 1) {
+        totalDoubleShiftsCount++;
+      }
     });
   }
 
@@ -732,8 +738,10 @@ function App() {
                       return (
                         <tr key={emp.id} className={emp.isUnregistered ? 'unregistered-row' : ''}>
                           <td className="emp-name">
-                            <User size={16}/> {emp.name}
-                            {emp.isUnregistered && <span className="temp-badge" title="עובד זה שובץ אך לא מופיע ברשימת העובדים הכללית">זמני</span>}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <User size={16}/> {emp.name}
+                              {emp.isUnregistered && <span className="temp-badge" title="עובד זה שובץ אך לא מופיע ברשימת העובדים הכללית">זמני</span>}
+                            </div>
                           </td>
                           <td>
                             {emp.isUnregistered ? 
@@ -1078,12 +1086,23 @@ function App() {
 
               {selectedEmployeeForPersonal && (
                 <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  <div style={{ background: 'var(--primary-light)', padding: '8px 16px', borderRadius: '10px', border: '1px solid var(--card-border)', display: 'flex', gap: '15px' }}>
+                  <div style={{ background: 'var(--primary-light)', padding: '8px 16px', borderRadius: '10px', border: '1px solid var(--card-border)', display: 'flex', gap: '15px', alignItems: 'center' }}>
                     <div style={{ textAlign: 'center' }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>משמרות השבוע</span>
                       <strong style={{ fontSize: '1.2rem', color: 'var(--primary-color)' }}>{totalEmployeeShiftsCount}</strong>
                     </div>
-                    <div style={{ width: '1px', background: 'var(--card-border)' }}></div>
+                    {totalDoubleShiftsCount > 0 && (
+                      <>
+                        <div style={{ width: '1px', height: '24px', background: 'var(--card-border)' }}></div>
+                        <div style={{ textAlign: 'center' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>משמרות כפולות</span>
+                          <strong style={{ fontSize: '1.2rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                            <Flame size={15} /> {totalDoubleShiftsCount}
+                          </strong>
+                        </div>
+                      </>
+                    )}
+                    <div style={{ width: '1px', height: '24px', background: 'var(--card-border)' }}></div>
                     <div style={{ textAlign: 'center' }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>סה"כ שעות (למשכורת)</span>
                       <strong style={{ fontSize: '1.2rem', color: '#10b981' }}>{totalEmployeeHours.toFixed(1)} שעות</strong>
@@ -1132,14 +1151,20 @@ function App() {
                 </div>
 
                 {/* Payroll Summary Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-around', background: 'var(--primary-light)', padding: '12px 20px', borderRadius: '10px', marginBottom: '20px', border: '1px solid var(--card-border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', flexWrap: 'wrap', gap: '15px', background: 'var(--primary-light)', padding: '12px 20px', borderRadius: '10px', marginBottom: '20px', border: '1px solid var(--card-border)' }}>
                   <div>
                     <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>סה"כ משמרות: </span>
                     <strong style={{ fontSize: '1.1rem', color: 'var(--text-dark)' }}>{totalEmployeeShiftsCount}</strong>
                   </div>
+                  {totalDoubleShiftsCount > 0 && (
+                    <div style={{ background: isDarkMode ? 'rgba(245, 158, 11, 0.2)' : '#fef3c7', padding: '4px 14px', borderRadius: '20px', border: '1px solid #f59e0b', color: isDarkMode ? '#fcd34d' : '#b45309', fontWeight: 'bold', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Flame size={16} color="#f59e0b" />
+                      <span>{totalDoubleShiftsCount} משמרות כפולות השבוע</span>
+                    </div>
+                  )}
                   <div>
                     <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>סה"כ שעות עבודה מחושבות למשכורת: </span>
-                    <strong style={{ fontSize: '1.1rem', color: '#10b981' }}>{totalEmployeeHours.toFixed(1)} שעות</strong>
+                    <strong style={{ fontSize: '1.18rem', color: '#10b981' }}>{totalEmployeeHours.toFixed(1)} שעות</strong>
                   </div>
                 </div>
 
@@ -1174,21 +1199,72 @@ function App() {
                       if (dayShifts.length === 0) {
                         return (
                           <tr key={day}>
-                            <td className="emp-name" style={{ fontSize: '1.1rem' }}>{day}</td>
+                            <td className="emp-name" style={{ fontSize: '1.05rem', fontWeight: 'bold', padding: '14px 18px' }}>{day}</td>
                             <td colSpan="4" style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic' }}>-- יום חופש --</td>
                           </tr>
                         );
                       }
                       
-                      return dayShifts.map((item, idx) => (
-                        <tr key={`${day}-${idx}`}>
-                          {idx === 0 && <td rowSpan={dayShifts.length} className="emp-name" style={{ fontSize: '1.1rem', verticalAlign: 'top', paddingTop: '16px' }}>{day}</td>}
-                          <td style={{ fontWeight: 'bold' }}>{item.cat}</td>
-                          <td style={{ direction: 'ltr', textAlign: 'center', fontWeight: '600' }}>{item.shift.start} - {item.shift.end}</td>
-                          <td style={{ color: '#10b981', fontWeight: 'bold', textAlign: 'center' }}>{item.hours.toFixed(1)} שעות</td>
-                          <td style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>{item.shift.role || '---'}</td>
-                        </tr>
-                      ));
+                      const isDouble = dayShifts.length > 1;
+                      const totalDayHours = dayShifts.reduce((sum, item) => sum + item.hours, 0);
+
+                      return dayShifts.map((item, idx) => {
+                        const isFirstRow = idx === 0;
+                        const doubleRowBg = isDarkMode ? 'rgba(245, 158, 11, 0.12)' : 'rgba(254, 243, 199, 0.45)';
+                        const doubleCellBg = isDarkMode ? 'rgba(245, 158, 11, 0.22)' : '#fef3c7';
+
+                        return (
+                          <tr 
+                            key={`${day}-${idx}`}
+                            style={isDouble ? { background: doubleRowBg } : {}}
+                          >
+                            {isFirstRow && (
+                              <td 
+                                rowSpan={dayShifts.length} 
+                                className="emp-name" 
+                                style={{ 
+                                  fontSize: '1.05rem', 
+                                  verticalAlign: 'middle', 
+                                  padding: '14px 18px',
+                                  borderRight: isDouble ? '5px solid #f59e0b' : '1px solid var(--card-border)',
+                                  background: isDouble ? doubleCellBg : 'transparent'
+                                }}
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                                  <span style={{ fontWeight: '800', fontSize: '1.15rem', color: 'var(--text-dark)' }}>{day}</span>
+                                  {isDouble && (
+                                    <>
+                                      <span className="double-shift-badge">
+                                        <Flame size={13} /> משמרת כפולה
+                                      </span>
+                                      <span style={{ fontSize: '0.8rem', color: isDarkMode ? '#fcd34d' : '#b45309', fontWeight: '700' }}>
+                                        ({totalDayHours.toFixed(1)} שעות ביום)
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            )}
+                            <td style={{ fontWeight: 'bold', padding: '14px 18px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: 'var(--primary-color)' }}>{getCategoryIcon(item.cat)}</span>
+                                <span style={{ color: 'var(--text-dark)' }}>{item.cat}</span>
+                              </div>
+                            </td>
+                            <td style={{ direction: 'ltr', textAlign: 'center', fontWeight: '600', padding: '14px 18px' }}>
+                              <span style={{ background: 'var(--input-bg)', padding: '5px 12px', borderRadius: '8px', border: '1px solid var(--card-border)', fontSize: '0.95rem' }}>
+                                {item.shift.start} - {item.shift.end}
+                              </span>
+                            </td>
+                            <td style={{ color: '#10b981', fontWeight: 'bold', textAlign: 'center', padding: '14px 18px', fontSize: '0.95rem' }}>
+                              {item.hours.toFixed(1)} שעות
+                            </td>
+                            <td style={{ color: 'var(--primary-color)', fontWeight: 'bold', padding: '14px 18px' }}>
+                              {item.shift.role || '---'}
+                            </td>
+                          </tr>
+                        );
+                      });
                     })}
                   </tbody>
                 </table>
