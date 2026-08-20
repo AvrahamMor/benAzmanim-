@@ -4,10 +4,22 @@ import {
   AlertCircle, Calendar, Clock, User, Briefcase, Trash2, Users, 
   LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, 
   Download, History, ChefHat, CheckCircle, UserCheck, Flame, 
-  ChevronRight, ChevronLeft, CalendarDays, Sunrise, Sunset 
+  ChevronRight, ChevronLeft, CalendarDays, Sunrise, Sunset,
+  Cloud, Database, Settings, Check, X, ExternalLink
 } from 'lucide-react';
 import initialSchedule from './schedule.json';
 import initialStaff from './staff.json';
+import { 
+  isFirebaseConfigured, 
+  getFirebaseConfig, 
+  saveFirebaseConfig, 
+  subscribeToSchedule, 
+  saveScheduleToCloud, 
+  subscribeToStaff, 
+  saveStaffToCloud, 
+  subscribeToArchives, 
+  saveArchiveToCloud 
+} from './firebase.js';
 import './App.css';
 
 const CATEGORIES = ['בייגל', 'יריד אוכל מוכן', 'מסעדה', 'מטבח', 'מארחות'];
@@ -92,6 +104,13 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
 
+  // Firebase Configuration & State
+  const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false);
+  const [isCloudConnected, setIsCloudConnected] = useState(() => isFirebaseConfigured());
+  const [firebaseConfigForm, setFirebaseConfigForm] = useState(() => getFirebaseConfig());
+  const [rawConfigInput, setRawConfigInput] = useState('');
+  const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
+
   // Calculate current Israeli week dates based on weekOffset
   const currentSunday = useMemo(() => {
     const sun = getSundayOfWeek(new Date());
@@ -172,26 +191,74 @@ function App() {
   };
 
   // Shifts state
-  const [shifts, setShifts] = useState(() => ensureCategoriesExist(initialSchedule));
-  const [archives, setArchives] = useState([]);
+  const [shifts, setShifts] = useState(() => {
+    const saved = localStorage.getItem('shiftApp_shifts');
+    if (saved) {
+      try {
+        return ensureCategoriesExist(JSON.parse(saved));
+      } catch (e) {}
+    }
+    return ensureCategoriesExist(initialSchedule);
+  });
+
+  const [archives, setArchives] = useState(() => {
+    const saved = localStorage.getItem('shiftApp_archives');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [];
+  });
+
   const [selectedArchiveWeek, setSelectedArchiveWeek] = useState(null);
   const [selectedPersonalWeekId, setSelectedPersonalWeekId] = useState('current');
 
+  // Load local dev archives if available
   useEffect(() => {
     fetch('/api/get-archives')
       .then(res => res.json())
-      .then(data => setArchives(data))
-      .catch(err => console.error('Failed to load archives:', err));
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setArchives(data);
+          localStorage.setItem('shiftApp_archives', JSON.stringify(data));
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  // Sync state when JSON files update
+  // Firebase Real-time Cloud Synchronization
   useEffect(() => {
-    setShifts(ensureCategoriesExist(initialSchedule));
-  }, [initialSchedule]);
+    if (!isCloudConnected) return;
 
-  useEffect(() => {
-    setStaffList(initialStaff);
-  }, [initialStaff]);
+    // 1. Subscribe to schedule changes in Firestore
+    const unsubSchedule = subscribeToSchedule((cloudShifts) => {
+      if (cloudShifts) {
+        setShifts(ensureCategoriesExist(cloudShifts));
+        localStorage.setItem('shiftApp_shifts', JSON.stringify(cloudShifts));
+      }
+    });
+
+    // 2. Subscribe to staff changes in Firestore
+    const unsubStaff = subscribeToStaff((cloudStaff) => {
+      if (cloudStaff && Array.isArray(cloudStaff)) {
+        setStaffList(cloudStaff);
+        localStorage.setItem('shiftApp_staffList', JSON.stringify(cloudStaff));
+      }
+    });
+
+    // 3. Subscribe to archives changes in Firestore
+    const unsubArchives = subscribeToArchives((cloudArchives) => {
+      if (cloudArchives && Array.isArray(cloudArchives)) {
+        setArchives(cloudArchives);
+        localStorage.setItem('shiftApp_archives', JSON.stringify(cloudArchives));
+      }
+    });
+
+    return () => {
+      if (unsubSchedule) unsubSchedule();
+      if (unsubStaff) unsubStaff();
+      if (unsubArchives) unsubArchives();
+    };
+  }, [isCloudConnected]);
 
   // Dark mode effect
   useEffect(() => {
@@ -251,6 +318,11 @@ function App() {
         if (!newShifts[category][day]) newShifts[category][day] = [];
         newShifts[category][day].push({ employee: '', role: '', start: startT, end: endT });
       });
+
+      // Save to localStorage & Cloud & Local Dev API
+      localStorage.setItem('shiftApp_shifts', JSON.stringify(newShifts));
+      saveScheduleToCloud(newShifts);
+
       setTimeout(() => {
         fetch('/api/save-schedule', {
           method: 'POST',
@@ -270,6 +342,10 @@ function App() {
           newShifts[category][day].pop();
         }
       });
+
+      localStorage.setItem('shiftApp_shifts', JSON.stringify(newShifts));
+      saveScheduleToCloud(newShifts);
+
       setTimeout(() => {
         fetch('/api/save-schedule', {
           method: 'POST',
@@ -300,6 +376,9 @@ function App() {
         DAYS.forEach(day => {
            newShifts[category][day] = newShifts[category][day].filter(s => s !== null);
         });
+
+        localStorage.setItem('shiftApp_shifts', JSON.stringify(newShifts));
+        saveScheduleToCloud(newShifts);
 
         setTimeout(() => {
           fetch('/api/save-schedule', {
@@ -406,13 +485,19 @@ function App() {
       return;
     }
 
-    setStaffList([...staffList, { id: Date.now(), name: newStaffName.trim() }]);
+    const updatedList = [...staffList, { id: Date.now(), name: newStaffName.trim() }];
+    setStaffList(updatedList);
     setNewStaffName('');
+    localStorage.setItem('shiftApp_staffList', JSON.stringify(updatedList));
+    saveStaffToCloud(updatedList);
   };
 
   const removeStaffMember = (id) => {
     if(window.confirm('האם אתה בטוח שברצונך למחוק עובד זה מהרשימה הכללית?')) {
-      setStaffList(staffList.filter(s => s.id !== id));
+      const updatedList = staffList.filter(s => s.id !== id);
+      setStaffList(updatedList);
+      localStorage.setItem('shiftApp_staffList', JSON.stringify(updatedList));
+      saveStaffToCloud(updatedList);
     }
   };
 
@@ -432,13 +517,16 @@ function App() {
     };
 
     try {
+      const updatedArchives = [...archives, archiveData];
+      setArchives(updatedArchives);
+      localStorage.setItem('shiftApp_archives', JSON.stringify(updatedArchives));
+      saveArchiveToCloud(archiveData);
+
       await fetch('/api/archive-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(archiveData)
-      });
-      
-      setArchives(prev => [...prev, archiveData]);
+      }).catch(() => {});
 
       const newShifts = JSON.parse(JSON.stringify(shifts));
       CATEGORIES.forEach(cat => {
@@ -450,13 +538,16 @@ function App() {
       });
 
       setShifts(newShifts);
+      localStorage.setItem('shiftApp_shifts', JSON.stringify(newShifts));
+      saveScheduleToCloud(newShifts);
+
       await fetch('/api/save-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newShifts)
-      });
+      }).catch(() => {});
       
-      alert('השבוע נשמר בארכיון בהצלחה והלוח אופס לקראת השבוע החדש!');
+      alert('השבוע נשמר בארכיון בענן בהצלחה והלוח אופס לקראת השבוע החדש!');
     } catch (err) {
       console.error('Failed to archive week:', err);
       alert('אירעה שגיאה בשמירת השבוע בארכיון');
@@ -473,7 +564,10 @@ function App() {
   const saveData = () => {
     localStorage.setItem('shiftApp_staffList', JSON.stringify(staffList));
     localStorage.setItem('shiftApp_shifts', JSON.stringify(shifts));
-    alert('כל הנתונים (עובדים ומשמרות) נשמרו בהצלחה במחשב זה!');
+    localStorage.setItem('shiftApp_archives', JSON.stringify(archives));
+    saveScheduleToCloud(shifts);
+    saveStaffToCloud(staffList);
+    alert('כל הנתונים נשמרו בהצלחה (במכשיר זה ובענן אם מחובר)!');
   };
 
   const updateShift = (category, day, index, field, value) => {
@@ -483,12 +577,15 @@ function App() {
       newDayList[index] = { ...newDayList[index], [field]: value };
       newShifts[category] = { ...newShifts[category], [day]: newDayList };
       
-      // Auto-save
+      // Auto-save locally and to Firebase
+      localStorage.setItem('shiftApp_shifts', JSON.stringify(newShifts));
+      saveScheduleToCloud(newShifts);
+
       fetch('/api/save-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newShifts)
-      }).catch(e => console.error('Failed to auto-save:', e));
+      }).catch(() => {});
       
       return newShifts;
     });
@@ -502,15 +599,58 @@ function App() {
         newShifts[category][day].splice(index, 1);
       }
       
-      // Auto-save
+      // Auto-save locally and to Firebase
+      localStorage.setItem('shiftApp_shifts', JSON.stringify(newShifts));
+      saveScheduleToCloud(newShifts);
+
       fetch('/api/save-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newShifts)
-      }).catch(e => console.error('Failed to auto-save:', e));
+      }).catch(() => {});
       
       return newShifts;
     });
+  };
+
+  const handleSaveFirebaseConfig = (e) => {
+    e.preventDefault();
+    let configToSave = { ...firebaseConfigForm };
+
+    // If raw JSON was provided in textarea, try to parse it
+    if (rawConfigInput.trim()) {
+      try {
+        let cleanText = rawConfigInput.trim();
+        // Remove 'const firebaseConfig = ' or similar JS variable declarations
+        if (cleanText.includes('{')) {
+          cleanText = cleanText.substring(cleanText.indexOf('{'), cleanText.lastIndexOf('}') + 1);
+        }
+        // Normalize single quotes or unquoted keys to valid JSON if needed
+        const parsed = Function(`"use strict";return (${cleanText})`)();
+        if (parsed && typeof parsed === 'object') {
+          configToSave = { ...configToSave, ...parsed };
+          setFirebaseConfigForm(configToSave);
+        }
+      } catch (err) {
+        console.error('Error parsing raw config:', err);
+      }
+    }
+
+    saveFirebaseConfig(configToSave);
+    const connected = isFirebaseConfigured();
+    setIsCloudConnected(connected);
+    setConfigSaveSuccess(true);
+    setTimeout(() => setConfigSaveSuccess(false), 3000);
+
+    if (connected) {
+      // Push current initial data to cloud so Firestore is immediately populated
+      saveScheduleToCloud(shifts);
+      saveStaffToCloud(staffList);
+      alert('חיבור Firebase הוגדר בהצלחה! הנתונים מסונכרנים כעת בענן בזמן אמת.');
+      setIsFirebaseModalOpen(false);
+    } else {
+      alert('נראה שחסרים מפתחות (API Key או Project ID). אנא בדוק את הפרטים.');
+    }
   };
 
   const getCategoryIcon = (cat) => {
@@ -781,7 +921,25 @@ function App() {
           ))}
         </nav>
 
-        <div className="sidebar-footer" style={{ marginTop: 'auto', padding: '20px 14px' }}>
+        <div className="sidebar-footer" style={{ marginTop: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          
+          {/* Cloud Database Sync Status & Settings Button */}
+          <button 
+            className="nav-item cloud-sync-btn"
+            onClick={() => setIsFirebaseModalOpen(true)}
+            style={{ 
+              justifyContent: 'center', 
+              border: isCloudConnected ? '1px solid #10b981' : '1px solid var(--primary-color)',
+              background: isCloudConnected ? (isDarkMode ? 'rgba(16, 185, 129, 0.15)' : '#d1fae5') : 'var(--primary-light)',
+              color: isCloudConnected ? (isDarkMode ? '#6ee7b7' : '#065f46') : 'var(--primary-light-text)',
+              fontSize: '0.85rem',
+              fontWeight: '700'
+            }}
+          >
+            <Cloud size={16} />
+            <span>{isCloudConnected ? '🟢 מסד נתונים ענן פעיל' : '☁️ הגדרות Firebase'}</span>
+          </button>
+
           <button 
             className="nav-item theme-toggle" 
             onClick={() => setIsDarkMode(!isDarkMode)}
@@ -862,7 +1020,7 @@ function App() {
                   <History size={18} /> סגור שבוע נוכחי והתחל חדש
                 </button>
                 <button onClick={saveData} className="btn-primary" style={{ background: '#10b981', padding: '10px 18px' }}>
-                  <Save size={18} /> שמור נתונים (בדפדפן)
+                  <Save size={18} /> שמור נתונים בענן
                 </button>
                 <button onClick={copyDataToAI} className="btn-primary" style={{ background: '#4f46e5', padding: '10px 18px' }}>
                   <Download size={18} /> העתק נתונים לעוזר 
@@ -1636,7 +1794,7 @@ function App() {
             <div className="view-header">
               <div>
                 <h1>ארכיון שבועות</h1>
-                <p>צופה בהיסטוריית סידורי עבודה קודמים שנשמרו</p>
+                <p>צופה בהיסטוריית סידורי עבודה קודמים שנשמרו בענן</p>
               </div>
             </div>
 
@@ -1713,6 +1871,111 @@ function App() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Firebase Cloud Settings Modal */}
+        {isFirebaseModalOpen && (
+          <div className="modal-backdrop" onClick={() => setIsFirebaseModalOpen(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} dir="rtl">
+              <div className="modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Cloud size={24} style={{ color: 'var(--primary-color)' }} />
+                  <h2>הגדרות חיבור למסד נתונים Firebase Firestore</h2>
+                </div>
+                <button className="modal-close-btn" onClick={() => setIsFirebaseModalOpen(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="firebase-status-banner" style={{ background: isCloudConnected ? 'rgba(16, 185, 129, 0.15)' : 'var(--primary-light)', padding: '14px', borderRadius: '10px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Database size={24} style={{ color: isCloudConnected ? '#10b981' : 'var(--primary-color)' }} />
+                  <div>
+                    <strong style={{ color: isCloudConnected ? (isDarkMode ? '#6ee7b7' : '#065f46') : 'var(--primary-light-text)', fontSize: '1.05rem', display: 'block' }}>
+                      {isCloudConnected ? '🟢 מסד הנתונים בענן מחובר ופעיל בזמן אמת!' : '🟡 טרם הוזנו מפתחות Firebase'}
+                    </strong>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      {isCloudConnected ? 'כל שינוי בשיבוץ או בעובדים מסתנכרן אוטומטית בין כל המכשירים.' : 'הזן את הגדרות פרויקט Firebase שלך מ-Firebase Console.'}
+                    </span>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveFirebaseConfig} className="firebase-config-form">
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px', fontSize: '0.95rem' }}>
+                      💡 הדבקה מהירה של אובייקט הגדרות (Firebase SDK Config):
+                    </label>
+                    <textarea 
+                      placeholder="הדבק כאן את הקוד מ-Firebase Console (למשל: const firebaseConfig = { apiKey: '...', projectId: '...' };)"
+                      value={rawConfigInput}
+                      onChange={e => setRawConfigInput(e.target.value)}
+                      rows={3}
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)', fontFamily: 'monospace', fontSize: '0.85rem' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '4px' }}>API Key:</label>
+                      <input 
+                        type="text" 
+                        className="compact-input"
+                        placeholder="AIzaSy..."
+                        value={firebaseConfigForm.apiKey || ''}
+                        onChange={e => setFirebaseConfigForm({ ...firebaseConfigForm, apiKey: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '4px' }}>Project ID:</label>
+                      <input 
+                        type="text" 
+                        className="compact-input"
+                        placeholder="my-project-id"
+                        value={firebaseConfigForm.projectId || ''}
+                        onChange={e => setFirebaseConfigForm({ ...firebaseConfigForm, projectId: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '4px' }}>Auth Domain:</label>
+                      <input 
+                        type="text" 
+                        className="compact-input"
+                        placeholder="my-project.firebaseapp.com"
+                        value={firebaseConfigForm.authDomain || ''}
+                        onChange={e => setFirebaseConfigForm({ ...firebaseConfigForm, authDomain: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '4px' }}>App ID:</label>
+                      <input 
+                        type="text" 
+                        className="compact-input"
+                        placeholder="1:123456789:web:abcdef..."
+                        value={firebaseConfigForm.appId || ''}
+                        onChange={e => setFirebaseConfigForm({ ...firebaseConfigForm, appId: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <a 
+                      href="https://console.firebase.google.com" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{ color: 'var(--primary-color)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none', fontWeight: 'bold' }}
+                    >
+                      <span>פתח את מסוף Firebase</span>
+                      <ExternalLink size={14} />
+                    </a>
+
+                    <button type="submit" className="btn-primary" style={{ padding: '10px 24px' }}>
+                      <Save size={18} /> שמור והתחבר למסד הנתונים
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
         )}
       </main>
