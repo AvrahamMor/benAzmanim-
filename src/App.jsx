@@ -1,6 +1,11 @@
 import html2canvas from 'html2canvas';
-import React, { useState, useEffect } from 'react';
-import { AlertCircle, Calendar, Clock, User, Briefcase, Trash2, Users, LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, Download, History, ChefHat, CheckCircle, UserCheck, Flame } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  AlertCircle, Calendar, Clock, User, Briefcase, Trash2, Users, 
+  LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, 
+  Download, History, ChefHat, CheckCircle, UserCheck, Flame, 
+  ChevronRight, ChevronLeft, CalendarDays, Sunrise, Sunset 
+} from 'lucide-react';
 import initialSchedule from './schedule.json';
 import initialStaff from './staff.json';
 import './App.css';
@@ -40,9 +45,61 @@ function getShiftDurationHours(startStr, endStr) {
   return Math.max(0, (end - start) / 60);
 }
 
+// Israeli Calendar Date Helpers (Week begins on Sunday)
+function getSundayOfWeek(d = new Date()) {
+  const date = new Date(d);
+  const day = date.getDay(); // 0 is Sunday, 6 is Saturday
+  date.setDate(date.getDate() - day);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function formatDateShort(d) {
+  if (!d) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${day}.${month}`;
+}
+
+function formatDateFull(d) {
+  if (!d) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}.${month}.${year}`;
+}
+
+function getWeekDates(weekStartSunday) {
+  const dates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStartSunday);
+    d.setDate(d.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
+}
+
+function isToday(d) {
+  if (!d) return false;
+  const today = new Date();
+  return d.getDate() === today.getDate() &&
+         d.getMonth() === today.getMonth() &&
+         d.getFullYear() === today.getFullYear();
+}
+
 function App() {
   const [currentView, setCurrentView] = useState('employees'); 
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  // Calculate current Israeli week dates based on weekOffset
+  const currentSunday = useMemo(() => {
+    const sun = getSundayOfWeek(new Date());
+    sun.setDate(sun.getDate() + weekOffset * 7);
+    return sun;
+  }, [weekOffset]);
+
+  const weekDates = useMemo(() => getWeekDates(currentSunday), [currentSunday]);
 
   const handleExportSchedule = async () => {
     const target = document.getElementById('schedule-export-target');
@@ -67,7 +124,7 @@ function App() {
       const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = image;
-      link.download = `סידור_עבודה_${currentView}.png`;
+      link.download = `סידור_עבודה_${currentView}_${formatDateShort(weekDates[0])}-${formatDateShort(weekDates[6])}.png`;
       link.click();
     } catch (err) {
       console.error('Failed to export schedule', err);
@@ -158,7 +215,7 @@ function App() {
       const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = image;
-      link.download = `לוז_אישי_${selectedEmployeeForPersonal}.png`;
+      link.download = `לוז_אישי_${selectedEmployeeForPersonal}_${formatDateShort(weekDates[0])}-${formatDateShort(weekDates[6])}.png`;
       link.click();
     } catch (err) {}
   };
@@ -166,8 +223,30 @@ function App() {
   const addRow = (category, section = 'evening') => {
     setShifts(prev => {
       const newShifts = JSON.parse(JSON.stringify(prev));
-      const startT = section === 'morning' ? '10:00' : '17:00';
-      const endT = section === 'morning' ? '17:00' : '01:00';
+      let startT = '17:00';
+      let endT = '01:00';
+
+      if (category === 'בייגל') {
+        if (section === 'morning') {
+          startT = '07:00';
+          endT = '15:00';
+        } else if (section === 'mid') {
+          startT = '10:00';
+          endT = '19:00';
+        } else {
+          startT = '15:00';
+          endT = '23:00';
+        }
+      } else {
+        if (section === 'morning') {
+          startT = '10:00';
+          endT = '17:00';
+        } else {
+          startT = '17:00';
+          endT = '01:00';
+        }
+      }
+
       DAYS.forEach(day => {
         if (!newShifts[category][day]) newShifts[category][day] = [];
         newShifts[category][day].push({ employee: '', role: '', start: startT, end: endT });
@@ -204,15 +283,15 @@ function App() {
 
   const deleteSpecificRow = (category, section, rowIndex) => {
     const processed = getProcessedShifts();
-    if (!processed) return;
+    if (!processed || !processed[section]) return;
 
     if(window.confirm('האם אתה בטוח שברצונך למחוק את כל השורה הזו לרוחב כל השבוע?')) {
       setShifts(prev => {
         const newShifts = JSON.parse(JSON.stringify(prev));
         
         DAYS.forEach(day => {
-          const slotToDelete = processed[section][day][rowIndex];
-          if (slotToDelete) {
+          const slotToDelete = processed[section][day]?.[rowIndex];
+          if (slotToDelete && slotToDelete.originalIndex !== undefined) {
              newShifts[category][day][slotToDelete.originalIndex] = null;
           }
         });
@@ -339,7 +418,7 @@ function App() {
 
   const archiveAndResetWeek = async () => {
     const today = new Date();
-    const defaultName = `שבוע ${today.toLocaleDateString('he-IL')}`;
+    const defaultName = `שבוע ${formatDateShort(weekDates[0])}-${formatDateShort(weekDates[6])} (${today.toLocaleDateString('he-IL')})`;
     const weekName = prompt('הכנס שם לשבוע הנוכחי (לשמירה בארכיון):', defaultName);
     if (!weekName) return;
 
@@ -347,6 +426,8 @@ function App() {
       id: Date.now(),
       name: weekName,
       date: today.toISOString(),
+      weekStart: weekDates[0].toISOString(),
+      weekEnd: weekDates[6].toISOString(),
       shifts: shifts
     };
 
@@ -443,6 +524,84 @@ function App() {
 
   const getProcessedShifts = () => {
     if (!CATEGORIES.includes(currentView)) return null;
+
+    if (currentView === 'בייגל') {
+      const processed = { morning: {}, mid: {}, evening: {} };
+      let maxMorning = 0;
+      let maxMid = 0;
+      let maxEvening = 0;
+
+      DAYS.forEach(day => {
+        const slots = shifts[currentView][day] || [];
+        const withIndex = slots.map((s, i) => ({ ...s, originalIndex: i }));
+        
+        let morningPool = [];
+        let midPool = [];
+        let eveningPool = [];
+        
+        withIndex.forEach(slot => {
+          if (slot.start) {
+            const hour = parseInt(slot.start.split(':')[0], 10);
+            if (hour < 9 || (hour === 9 && parseInt(slot.start.split(':')[1] || '0', 10) < 30) || slot.start === '07:00') {
+              morningPool.push(slot);
+            } else if (hour >= 9 && hour < 14) {
+              midPool.push(slot);
+            } else {
+              eveningPool.push(slot);
+            }
+          } else {
+            if (slot.originalIndex < 3) morningPool.push(slot);
+            else if (slot.originalIndex < 6) midPool.push(slot);
+            else eveningPool.push(slot);
+          }
+        });
+        
+        const processSlotFlags = (slot) => {
+          if (!slot.employee) return { ...slot, isDouble: false, hasOverlapConflict: false };
+          const empName = slot.employee.trim();
+          
+          const empDayShifts = [];
+          CATEGORIES.forEach(cat => {
+            (shifts[cat]?.[day] || []).forEach((s, idx) => {
+              if (s.employee && s.employee.trim() === empName) {
+                empDayShifts.push({ category: cat, originalIndex: idx, start: s.start, end: s.end });
+              }
+            });
+          });
+
+          const isDouble = empDayShifts.length > 1;
+          const hasOverlapConflict = isDouble && empDayShifts.some(other => {
+            const isSameShift = (other.category === currentView && other.originalIndex === slot.originalIndex);
+            return !isSameShift && isTimeOverlapping(slot.start, slot.end, other.start, other.end);
+          });
+
+          return { ...slot, isDouble, hasOverlapConflict };
+        };
+        
+        const sortFn = (a, b) => {
+          const aIsManager = a.role && a.role.includes('מנהל');
+          const bIsManager = b.role && b.role.includes('מנהל');
+          if (aIsManager && !bIsManager) return -1;
+          if (!aIsManager && bIsManager) return 1;
+          return a.originalIndex - b.originalIndex;
+        };
+        
+        processed.morning[day] = morningPool.map(processSlotFlags).sort(sortFn);
+        processed.mid[day] = midPool.map(processSlotFlags).sort(sortFn);
+        processed.evening[day] = eveningPool.map(processSlotFlags).sort(sortFn);
+        
+        if (processed.morning[day].length > maxMorning) maxMorning = processed.morning[day].length;
+        if (processed.mid[day].length > maxMid) maxMid = processed.mid[day].length;
+        if (processed.evening[day].length > maxEvening) maxEvening = processed.evening[day].length;
+      });
+
+      processed.maxMorning = maxMorning || 1;
+      processed.maxMid = maxMid || 1;
+      processed.maxEvening = maxEvening || 1;
+      return processed;
+    }
+
+    // Standard 2-section processing for other departments
     const processed = { morning: {}, evening: {} };
     let maxMorning = 0;
     let maxEvening = 0;
@@ -465,12 +624,10 @@ function App() {
         }
       });
       
-      // Attach conflict & double flags
       const processSlotFlags = (slot) => {
         if (!slot.employee) return { ...slot, isDouble: false, hasOverlapConflict: false };
         const empName = slot.employee.trim();
         
-        // Find all shifts of this employee on this day across all categories
         const empDayShifts = [];
         CATEGORIES.forEach(cat => {
           (shifts[cat]?.[day] || []).forEach((s, idx) => {
@@ -481,8 +638,6 @@ function App() {
         });
 
         const isDouble = empDayShifts.length > 1;
-        
-        // Overlap exists ONLY if there is another DIFFERENT shift of the same employee on that day with overlapping hours
         const hasOverlapConflict = isDouble && empDayShifts.some(other => {
           const isSameShift = (other.category === currentView && other.originalIndex === slot.originalIndex);
           return !isSameShift && isTimeOverlapping(slot.start, slot.end, other.start, other.end);
@@ -491,20 +646,16 @@ function App() {
         return { ...slot, isDouble, hasOverlapConflict };
       };
       
-      morningPool = morningPool.map(processSlotFlags);
-      eveningPool = eveningPool.map(processSlotFlags);
-      
       const sortFn = (a, b) => {
         const aIsManager = a.role && a.role.includes('מנהל');
         const bIsManager = b.role && b.role.includes('מנהל');
         if (aIsManager && !bIsManager) return -1;
         if (!aIsManager && bIsManager) return 1;
-        
         return a.originalIndex - b.originalIndex;
       };
       
-      processed.morning[day] = morningPool.sort(sortFn);
-      processed.evening[day] = eveningPool.sort(sortFn);
+      processed.morning[day] = morningPool.map(processSlotFlags).sort(sortFn);
+      processed.evening[day] = eveningPool.map(processSlotFlags).sort(sortFn);
       
       if (processed.morning[day].length > maxMorning) maxMorning = processed.morning[day].length;
       if (processed.evening[day].length > maxEvening) maxEvening = processed.evening[day].length;
@@ -776,39 +927,98 @@ function App() {
         {/* Department Schedule View */}
         {CATEGORIES.includes(currentView) && (
           <div className="schedule-view">
-            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
               <div>
                 <h1>סידור עבודה: {currentView}</h1>
-                <p>ניהול משמרות יומי ושבועי</p>
+                <p>ניהול משמרות יומי ושבועי לפי לוח שנה ישראל</p>
               </div>
-              <button 
-                onClick={handleExportSchedule}
-                className="btn-primary" 
-              >
-                <Download size={18} /> הורד סידור עבודה
-              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                {/* Week Navigator */}
+                <div className="week-nav-widget">
+                  <button 
+                    onClick={() => setWeekOffset(prev => prev - 1)} 
+                    className="week-arrow-btn" 
+                    title="שבוע קודם"
+                  >
+                    <ChevronRight size={18} /> שבוע קודם
+                  </button>
+                  
+                  <div className="week-range-badge">
+                    <Calendar size={16} />
+                    <span>{formatDateFull(weekDates[0])} — {formatDateFull(weekDates[6])}</span>
+                    {weekOffset === 0 ? (
+                      <span className="current-week-indicator">שבוע נוכחי</span>
+                    ) : (
+                      <button onClick={() => setWeekOffset(0)} className="btn-today-jump">
+                        חזור להיום
+                      </button>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={() => setWeekOffset(prev => prev + 1)} 
+                    className="week-arrow-btn" 
+                    title="שבוע הבא"
+                  >
+                    שבוע הבא <ChevronLeft size={18} />
+                  </button>
+                </div>
+
+                <button 
+                  onClick={handleExportSchedule}
+                  className="btn-primary" 
+                >
+                  <Download size={18} /> הורד סידור עבודה
+                </button>
+              </div>
             </div>
 
             <div className="board">
               <div id="schedule-export-target" className="table-wrapper">
+                <div className="export-schedule-banner">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ color: 'var(--primary-color)' }}>{getCategoryIcon(currentView)}</span>
+                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-dark)' }}>
+                      סידור עבודה: {currentView}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontWeight: '700', fontSize: '0.95rem' }}>
+                    <Calendar size={16} style={{ color: 'var(--primary-color)' }} />
+                    <span>שבוע {formatDateFull(weekDates[0])} — {formatDateFull(weekDates[6])}</span>
+                  </div>
+                </div>
+
                 <table className="schedule-matrix">
                   <thead>
                     <tr>
                       <th className="slot-num-col">#</th>
-                      {DAYS.map(day => (
-                        <th key={day}>{day}</th>
-                      ))}
+                      {DAYS.map((day, dayIndex) => {
+                        const dayDate = weekDates[dayIndex];
+                        const today = isToday(dayDate);
+                        return (
+                          <th key={day} className={today ? 'today-col-header' : ''}>
+                            <div className="day-header-content">
+                              <span className="day-name-txt">{day}</span>
+                              <span className={`day-date-txt ${today ? 'today-date-badge' : ''}`}>
+                                {formatDateShort(dayDate)}
+                                {today && <span className="today-star">⭐</span>}
+                              </span>
+                            </div>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
                     {/* Morning Section */}
                     <tr className="shift-section-header">
                       <td colSpan={DAYS.length + 1} style={{ textAlign: 'center', background: 'var(--primary-light)', color: 'var(--primary-light-text)', padding: '12px', fontWeight: 'bold', fontSize: '1.15rem', position: 'relative' }}>
-                        ☀️ משמרת בוקר
+                        ☀️ {currentView === 'בייגל' ? 'משמרת בוקר (07:00 - 15:00)' : 'משמרת בוקר (10:00 - 17:00)'}
                         <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
                           <button 
                             onClick={() => addRow(currentView, 'morning')}
-                            title="הוסף שורת בוקר"
+                            title={currentView === 'בייגל' ? "הוסף שורת בוקר (07:00 - 15:00)" : "הוסף שורת בוקר"}
                             style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}
                           >
                             <Plus size={16} /> הוסף בוקר
@@ -854,7 +1064,7 @@ function App() {
                                 </td>
                               );
                             }
-                            const slot = processed.morning[day][rowIndex];
+                            const slot = processed.morning[day]?.[rowIndex];
                             if (!slot) return <td key={day} className="matrix-cell empty-cell"></td>;
                             
                             const isActive = slot.employee || slot.role;
@@ -916,14 +1126,129 @@ function App() {
                       );
                     })}
 
+                    {/* Mid Section for Bagel (10:00 - 19:00) */}
+                    {currentView === 'בייגל' && (
+                      <>
+                        <tr className="shift-section-header">
+                          <td colSpan={DAYS.length + 1} style={{ textAlign: 'center', background: isDarkMode ? 'rgba(245, 158, 11, 0.2)' : '#fef3c7', color: isDarkMode ? '#fcd34d' : '#92400e', padding: '12px', fontWeight: 'bold', fontSize: '1.15rem', position: 'relative', borderTop: '2px solid var(--card-border)' }}>
+                            🌤️ משמרת ביניים (10:00 - 19:00)
+                            <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
+                              <button 
+                                onClick={() => addRow(currentView, 'mid')}
+                                title="הוסף שורת ביניים (10:00 - 19:00)"
+                                style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}
+                              >
+                                <Plus size={16} /> הוסף ביניים
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {getProcessedShifts() && Array.from({ length: getProcessedShifts().maxMid || 1 }).map((_, rowIndex) => {
+                          const processed = getProcessedShifts();
+
+                          return (
+                            <tr key={`mid-${rowIndex}`}>
+                              <td className="slot-num-cell">
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                  <span>{rowIndex + 1}</span>
+                                  <div style={{ display: 'flex', gap: '2px' }}>
+                                    <button 
+                                      onClick={() => addRow(currentView, 'mid')}
+                                      title="הוסף שורת ביניים"
+                                      style={{ background: 'transparent', border: 'none', color: '#f59e0b', cursor: 'pointer', padding: '2px' }}
+                                    >
+                                      <Plus size={14} />
+                                    </button>
+                                    <button 
+                                      onClick={() => deleteSpecificRow(currentView, 'mid', rowIndex)}
+                                      title="מחק שורה זו"
+                                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                              {DAYS.map(day => {
+                                if (day === 'מוצ"ש') {
+                                  return (
+                                    <td key={day} className="matrix-cell empty-cell" style={{ background: 'var(--cell-empty-bg)', verticalAlign: 'middle', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                      אין משמרת ביניים
+                                    </td>
+                                  );
+                                }
+                                const slot = processed.mid?.[day]?.[rowIndex];
+                                if (!slot) return <td key={day} className="matrix-cell empty-cell"></td>;
+                                
+                                const isActive = slot.employee || slot.role;
+                                const origIndex = slot.originalIndex;
+                                const isConflict = slot.hasOverlapConflict;
+
+                                return (
+                                  <td key={day} className={`matrix-cell ${isActive ? 'active-cell' : ''} ${isConflict ? 'conflict-cell' : ''}`}>
+                                    <div className="cell-content">
+                                      <div className="cell-row header-row" style={{ position: 'relative' }}>
+                                        <input 
+                                          type="text" 
+                                          className="compact-input emp-input"
+                                          placeholder="שם עובד..."
+                                          value={slot.employee || ''}
+                                          onChange={(e) => updateShift(currentView, day, origIndex, 'employee', e.target.value)}
+                                          list="staff-list-options"
+                                        />
+                                        {isConflict && <span className="overlap-conflict-badge">חפיפה!</span>}
+                                        {slot.isDouble && !isConflict && <span className="double-shift-badge">כפולה</span>}
+                                        <button 
+                                          className="clear-cell-btn" 
+                                          onClick={() => clearSlot(currentView, day, origIndex)}
+                                          title="מחק משמרת זו לחלוטין"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                      <div className="cell-row">
+                                        <input 
+                                          type="text" 
+                                          className="compact-input role-input"
+                                          placeholder="תפקיד..."
+                                          value={slot.role || ''}
+                                          onChange={(e) => updateShift(currentView, day, origIndex, 'role', e.target.value)}
+                                          list="roles-list"
+                                        />
+                                      </div>
+                                      <div className="cell-row time-row">
+                                        <input 
+                                          type="time" 
+                                          className="compact-time"
+                                          value={slot.start || ''}
+                                          onChange={(e) => updateShift(currentView, day, origIndex, 'start', e.target.value)}
+                                        />
+                                        <span>-</span>
+                                        <input 
+                                          type="time" 
+                                          className="compact-time"
+                                          value={slot.end || ''}
+                                          onChange={(e) => updateShift(currentView, day, origIndex, 'end', e.target.value)}
+                                        />
+                                      </div>
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </>
+                    )}
+
                     {/* Evening Section */}
                     <tr className="shift-section-header">
                       <td colSpan={DAYS.length + 1} style={{ textAlign: 'center', background: 'var(--table-header-bg)', color: 'var(--text-dark)', padding: '12px', fontWeight: 'bold', fontSize: '1.15rem', position: 'relative', borderTop: '2px solid var(--card-border)' }}>
-                        🌙 משמרת ערב
+                        🌙 {currentView === 'בייגל' ? 'משמרת ערב (15:00 - 23:00)' : 'משמרת ערב (17:00 - 01:00)'}
                         <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
                           <button 
                             onClick={() => addRow(currentView, 'evening')}
-                            title="הוסף שורת ערב"
+                            title={currentView === 'בייגל' ? "הוסף שורת ערב (15:00 - 23:00)" : "הוסף שורת ערב"}
                             style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}
                           >
                             <Plus size={16} /> הוסף ערב
@@ -969,7 +1294,7 @@ function App() {
                                 </td>
                               );
                             }
-                            const slot = processed.evening[day][rowIndex];
+                            const slot = processed.evening[day]?.[rowIndex];
                             if (!slot) return <td key={day} className="matrix-cell empty-cell"></td>;
                             
                             const isActive = slot.employee || slot.role;
@@ -1033,11 +1358,19 @@ function App() {
                   </tbody>
                 </table>
               </div>
-              <div style={{ padding: '16px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '15px' }}>
-                <button onClick={() => addRow(currentView)} className="btn-primary" style={{ minWidth: '200px' }}>
-                   <Plus size={18} /> הוסף שורת משמרת
+              <div style={{ padding: '16px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
+                <button onClick={() => addRow(currentView, 'morning')} className="btn-primary" style={{ minWidth: '180px' }}>
+                   <Plus size={18} /> הוסף שורת בוקר
                 </button>
-                <button onClick={() => removeRow(currentView)} className="btn-primary" style={{ background: '#ef4444', minWidth: '200px' }}>
+                {currentView === 'בייגל' && (
+                  <button onClick={() => addRow(currentView, 'mid')} className="btn-primary" style={{ background: '#f59e0b', minWidth: '180px' }}>
+                     <Plus size={18} /> הוסף שורת ביניים
+                  </button>
+                )}
+                <button onClick={() => addRow(currentView, 'evening')} className="btn-primary" style={{ background: '#4f46e5', minWidth: '180px' }}>
+                   <Plus size={18} /> הוסף שורת ערב
+                </button>
+                <button onClick={() => removeRow(currentView)} className="btn-primary" style={{ background: '#ef4444', minWidth: '180px' }}>
                    <Trash2 size={18} /> מחק שורה אחרונה
                 </button>
               </div>
@@ -1063,7 +1396,7 @@ function App() {
                   onChange={e => setSelectedPersonalWeekId(e.target.value)}
                   style={{ padding: '10px 14px', fontSize: '1rem', background: 'var(--input-bg)', color: 'var(--input-text)', border: '1px solid var(--input-border)', borderRadius: '8px', cursor: 'pointer' }}
                 >
-                  <option value="current">📅 השבוע הנוכחי (פעיל)</option>
+                  <option value="current">📅 השבוע הנוכחי ({formatDateShort(weekDates[0])} - {formatDateShort(weekDates[6])})</option>
                   {archives.map(arch => (
                     <option key={arch.id} value={arch.id}>📂 {arch.name} ({new Date(arch.date).toLocaleDateString('he-IL')})</option>
                   ))}
@@ -1085,7 +1418,7 @@ function App() {
               </div>
 
               {selectedEmployeeForPersonal && (
-                <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
                   <div style={{ background: 'var(--primary-light)', padding: '8px 16px', borderRadius: '10px', border: '1px solid var(--card-border)', display: 'flex', gap: '15px', alignItems: 'center' }}>
                     <div style={{ textAlign: 'center' }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>משמרות השבוע</span>
@@ -1145,8 +1478,8 @@ function App() {
                   <h2 style={{ color: 'var(--text-dark)', fontSize: '1.8rem', fontWeight: '800', margin: '0 0 8px 0' }}>
                     לו"ז שבועי: {selectedEmployeeForPersonal}
                   </h2>
-                  <p style={{ color: 'var(--text-muted)', margin: 0 }}>
-                    {selectedPersonalWeekId === 'current' ? 'השבוע הנוכחי' : archives.find(a => String(a.id) === String(selectedPersonalWeekId))?.name || 'ארכיון'}
+                  <p style={{ color: 'var(--text-muted)', margin: 0, fontWeight: '600' }}>
+                    {selectedPersonalWeekId === 'current' ? `שבוע ${formatDateFull(weekDates[0])} — ${formatDateFull(weekDates[6])}` : archives.find(a => String(a.id) === String(selectedPersonalWeekId))?.name || 'ארכיון'}
                   </p>
                 </div>
 
@@ -1179,7 +1512,9 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {DAYS.map(day => {
+                    {DAYS.map((day, dayIndex) => {
+                      const dayDate = weekDates[dayIndex];
+                      const today = isToday(dayDate);
                       const dayShifts = [];
                       CATEGORIES.forEach(cat => {
                         (activeShiftsForPersonal[cat]?.[day] || []).forEach(shift => {
@@ -1198,8 +1533,14 @@ function App() {
                       
                       if (dayShifts.length === 0) {
                         return (
-                          <tr key={day}>
-                            <td className="emp-name" style={{ fontSize: '1.05rem', fontWeight: 'bold', padding: '14px 18px' }}>{day}</td>
+                          <tr key={day} className={today ? 'today-row-highlight' : ''}>
+                            <td className="emp-name" style={{ fontSize: '1.05rem', fontWeight: 'bold', padding: '14px 18px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span>{day}</span>
+                                <span className={`emp-date-badge ${today ? 'today-badge' : ''}`}>{formatDateShort(dayDate)}</span>
+                                {today && <span className="today-tag-mini">היום</span>}
+                              </div>
+                            </td>
                             <td colSpan="4" style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic' }}>-- יום חופש --</td>
                           </tr>
                         );
@@ -1216,7 +1557,7 @@ function App() {
                         return (
                           <tr 
                             key={`${day}-${idx}`}
-                            style={isDouble ? { background: doubleRowBg } : {}}
+                            style={isDouble ? { background: doubleRowBg } : (today ? { background: isDarkMode ? 'rgba(212, 175, 55, 0.08)' : '#fffdf5' } : {})}
                           >
                             {isFirstRow && (
                               <td 
@@ -1226,12 +1567,16 @@ function App() {
                                   fontSize: '1.05rem', 
                                   verticalAlign: 'middle', 
                                   padding: '14px 18px',
-                                  borderRight: isDouble ? '5px solid #f59e0b' : '1px solid var(--card-border)',
+                                  borderRight: isDouble ? '5px solid #f59e0b' : (today ? '5px solid var(--primary-color)' : '1px solid var(--card-border)'),
                                   background: isDouble ? doubleCellBg : 'transparent'
                                 }}
                               >
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
-                                  <span style={{ fontWeight: '800', fontSize: '1.15rem', color: 'var(--text-dark)' }}>{day}</span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontWeight: '800', fontSize: '1.15rem', color: 'var(--text-dark)' }}>{day}</span>
+                                    <span className={`emp-date-badge ${today ? 'today-badge' : ''}`}>{formatDateShort(dayDate)}</span>
+                                  </div>
+                                  {today && <span className="today-tag-mini">היום ⭐</span>}
                                   {isDouble && (
                                     <>
                                       <span className="double-shift-badge">
