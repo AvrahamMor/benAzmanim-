@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, 
   Download, History, ChefHat, CheckCircle, UserCheck, Flame, 
   ChevronRight, ChevronLeft, CalendarDays, Sunrise, Sunset,
-  Cloud, Database, Settings, Check, X, ExternalLink
+  Cloud, Database, Settings, Check, X, ExternalLink, Share2
 } from 'lucide-react';
 import initialSchedule from './schedule.json';
 import initialStaff from './staff.json';
@@ -104,6 +104,10 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
 
+  // Export / Image Preview State (Cross-Platform & iPad Compatible)
+  const [isExporting, setIsExporting] = useState(false);
+  const [previewModal, setPreviewModal] = useState({ isOpen: false, imageUrl: '', title: '', fileName: '' });
+
   // Firebase Configuration & State
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false);
   const [isCloudConnected, setIsCloudConnected] = useState(() => isFirebaseConfigured());
@@ -120,39 +124,113 @@ function App() {
 
   const weekDates = useMemo(() => getWeekDates(currentSunday), [currentSunday]);
 
-  const handleExportSchedule = async () => {
-    const target = document.getElementById('schedule-export-target');
-    if (!target) return;
-    
+  // Robust Cross-Platform Export Function (Supports iPadOS, iOS Safari, Android & Desktop)
+  const exportElementAsImage = async (elementId, title, fileName) => {
+    const target = document.getElementById(elementId);
+    if (!target || isExporting) return;
+
+    setIsExporting(true);
+
     const origWidth = target.style.width;
     const origHeight = target.style.height;
     const origOverflow = target.style.overflow;
-    
+    const origMinWidth = target.style.minWidth;
+    const origMaxWidth = target.style.maxWidth;
+
     target.style.width = 'fit-content';
+    target.style.minWidth = '1200px';
+    target.style.maxWidth = 'none';
     target.style.height = 'fit-content';
     target.style.overflow = 'visible';
-    
+
     try {
       const canvas = await html2canvas(target, {
         scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        scrollX: 0,
+        scrollY: 0,
         backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
-        windowWidth: target.scrollWidth,
+        windowWidth: Math.max(target.scrollWidth, 1250),
         windowHeight: target.scrollHeight,
       });
-      
-      const image = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = image;
-      link.download = `סידור_עבודה_${currentView}_${formatDateShort(weekDates[0])}-${formatDateShort(weekDates[6])}.png`;
-      link.click();
+
+      const dataUrl = canvas.toDataURL('image/png');
+
+      canvas.toBlob(async (blob) => {
+        let sharedSuccessfully = false;
+        if (blob) {
+          const file = new File([blob], `${fileName}.png`, { type: 'image/png' });
+
+          // Try native Web Share API (Native iPadOS / iOS Share Sheet)
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({
+                files: [file],
+                title: title,
+                text: `סידור עבודה: ${title}`
+              });
+              sharedSuccessfully = true;
+            } catch (shareErr) {
+              if (shareErr.name === 'AbortError') {
+                sharedSuccessfully = true;
+              }
+            }
+          }
+
+          if (!sharedSuccessfully) {
+            try {
+              const blobUrl = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = blobUrl;
+              link.download = `${fileName}.png`;
+              document.body.appendChild(link);
+              link.click();
+              setTimeout(() => {
+                document.body.removeChild(link);
+                URL.revokeObjectURL(blobUrl);
+              }, 1000);
+            } catch (e) {}
+          }
+        }
+
+        // Detect iPad / iOS
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+        // Open preview modal on iPad/iOS or if not natively shared
+        if (isIOS || !sharedSuccessfully) {
+          setPreviewModal({
+            isOpen: true,
+            imageUrl: dataUrl,
+            title: title,
+            fileName: fileName
+          });
+        }
+      }, 'image/png');
+
     } catch (err) {
-      console.error('Failed to export schedule', err);
-      alert('אירעה שגיאה בייצוא הסידור');
+      console.error('Failed to export schedule:', err);
+      alert('אירעה שגיאה בייצוא התמונה. אנא נסה שנית.');
     } finally {
       target.style.width = origWidth;
+      target.style.minWidth = origMinWidth;
+      target.style.maxWidth = origMaxWidth;
       target.style.height = origHeight;
       target.style.overflow = origOverflow;
+      setIsExporting(false);
     }
+  };
+
+  const handleExportSchedule = () => {
+    const fileName = `סידור_עבודה_${currentView}_${formatDateShort(weekDates[0])}-${formatDateShort(weekDates[6])}`;
+    const title = `סידור עבודה: ${currentView} (${formatDateShort(weekDates[0])} - ${formatDateShort(weekDates[6])})`;
+    exportElementAsImage('schedule-export-target', title, fileName);
+  };
+
+  const handleExportPersonal = () => {
+    const fileName = `לוז_אישי_${selectedEmployeeForPersonal}_${formatDateShort(weekDates[0])}-${formatDateShort(weekDates[6])}`;
+    const title = `לו"ז אישי: ${selectedEmployeeForPersonal} (${formatDateShort(weekDates[0])} - ${formatDateShort(weekDates[6])})`;
+    exportElementAsImage('personal-export-target', title, fileName);
   };
 
   // Staff List (Global directory of all employees)
@@ -274,19 +352,6 @@ function App() {
   const [activeEmployeesCount, setActiveEmployeesCount] = useState(0);
   const [selectedEmployeeForPersonal, setSelectedEmployeeForPersonal] = useState('');
 
-  const handleExportPersonal = async () => {
-    const target = document.getElementById('personal-export-target');
-    if (!target) return;
-    try {
-      const canvas = await html2canvas(target, { scale: 2, backgroundColor: isDarkMode ? '#0f172a' : '#ffffff' });
-      const image = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = image;
-      link.download = `לוז_אישי_${selectedEmployeeForPersonal}_${formatDateShort(weekDates[0])}-${formatDateShort(weekDates[6])}.png`;
-      link.click();
-    } catch (err) {}
-  };
-  
   const addRow = (category, section = 'evening') => {
     setShifts(prev => {
       const newShifts = JSON.parse(JSON.stringify(prev));
@@ -621,11 +686,9 @@ function App() {
     if (rawConfigInput.trim()) {
       try {
         let cleanText = rawConfigInput.trim();
-        // Remove 'const firebaseConfig = ' or similar JS variable declarations
         if (cleanText.includes('{')) {
           cleanText = cleanText.substring(cleanText.indexOf('{'), cleanText.lastIndexOf('}') + 1);
         }
-        // Normalize single quotes or unquoted keys to valid JSON if needed
         const parsed = Function(`"use strict";return (${cleanText})`)();
         if (parsed && typeof parsed === 'object') {
           configToSave = { ...configToSave, ...parsed };
@@ -643,7 +706,6 @@ function App() {
     setTimeout(() => setConfigSaveSuccess(false), 3000);
 
     if (connected) {
-      // Push current initial data to cloud so Firestore is immediately populated
       saveScheduleToCloud(shifts);
       saveStaffToCloud(staffList);
       alert('חיבור Firebase הוגדר בהצלחה! הנתונים מסונכרנים כעת בענן בזמן אמת.');
@@ -1126,8 +1188,10 @@ function App() {
                 <button 
                   onClick={handleExportSchedule}
                   className="btn-primary" 
+                  disabled={isExporting}
+                  style={{ opacity: isExporting ? 0.7 : 1 }}
                 >
-                  <Download size={18} /> הורד סידור עבודה
+                  <Download size={18} /> {isExporting ? 'מעבד תמונה...' : 'הורד סידור עבודה'}
                 </button>
               </div>
             </div>
@@ -1603,9 +1667,10 @@ function App() {
                   <button 
                     onClick={handleExportPersonal}
                     className="btn-primary" 
-                    style={{ height: '44px' }}
+                    disabled={isExporting}
+                    style={{ height: '44px', opacity: isExporting ? 0.7 : 1 }}
                   >
-                    <Download size={18} /> הורד תמונה
+                    <Download size={18} /> {isExporting ? 'מעבד...' : 'הורד תמונה'}
                   </button>
                 </div>
               )}
@@ -1871,6 +1936,68 @@ function App() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Image Preview & Share Modal (iPad / Mobile / Desktop) */}
+        {previewModal.isOpen && (
+          <div className="modal-backdrop" onClick={() => setPreviewModal({ ...previewModal, isOpen: false })}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '920px', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }} dir="rtl">
+              <div className="modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Download size={22} style={{ color: 'var(--primary-color)' }} />
+                  <h2>{previewModal.title}</h2>
+                </div>
+                <button className="modal-close-btn" onClick={() => setPreviewModal({ ...previewModal, isOpen: false })}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="modal-body" style={{ overflowY: 'auto', textAlign: 'center', padding: '20px' }}>
+                <div style={{ background: 'var(--primary-light)', padding: '12px 18px', borderRadius: '10px', marginBottom: '16px', color: 'var(--primary-light-text)', fontWeight: 'bold', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <span>📱 <strong>באייפד / טלפון:</strong> לחץ לחיצה ארוכה על התמונה ובחר <u>"שמור בתמונות"</u> או לחץ שתף!</span>
+                </div>
+
+                <div style={{ border: '1px solid var(--card-border)', borderRadius: '10px', overflow: 'hidden', marginBottom: '20px', background: isDarkMode ? '#0f172a' : '#ffffff', boxShadow: 'var(--shadow-md)' }}>
+                  <img 
+                    src={previewModal.imageUrl} 
+                    alt={previewModal.title} 
+                    style={{ width: '100%', height: 'auto', display: 'block', maxHeight: '55vh', objectFit: 'contain', margin: '0 auto' }} 
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                  {navigator.share && (
+                    <button 
+                      className="btn-primary" 
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(previewModal.imageUrl);
+                          const blob = await res.blob();
+                          const file = new File([blob], `${previewModal.fileName}.png`, { type: 'image/png' });
+                          await navigator.share({
+                            files: [file],
+                            title: previewModal.title
+                          });
+                        } catch (e) {}
+                      }}
+                      style={{ background: '#10b981', padding: '12px 24px', fontSize: '1rem' }}
+                    >
+                      <Share2 size={18} /> שתף / שמור בתמונות (iOS Share)
+                    </button>
+                  )}
+
+                  <a 
+                    href={previewModal.imageUrl} 
+                    download={`${previewModal.fileName}.png`}
+                    className="btn-primary"
+                    style={{ padding: '12px 24px', textDecoration: 'none', fontSize: '1rem' }}
+                  >
+                    <Download size={18} /> הורד תמונה לקובץ
+                  </a>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
