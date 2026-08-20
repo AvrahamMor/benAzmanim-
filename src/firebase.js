@@ -11,21 +11,26 @@ import {
   orderBy 
 } from 'firebase/firestore';
 
-// Default / saved config from localStorage or Vite env
+// Embedded default Firebase configuration for ben-hazmanim
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBQZt_kmX0kW0wjOzz584yZ5jjGUqXAyHY",
+  authDomain: "ben-hazmanim.firebaseapp.com",
+  projectId: "ben-hazmanim",
+  storageBucket: "ben-hazmanim.firebasestorage.app",
+  messagingSenderId: "734975842174",
+  appId: "1:734975842174:web:4df388e99971a8bacac52f"
+};
+
 const getSavedFirebaseConfig = () => {
   try {
     const local = localStorage.getItem('shiftApp_firebaseConfig');
-    if (local) return JSON.parse(local);
+    if (local) {
+      const parsed = JSON.parse(local);
+      if (parsed && parsed.apiKey) return parsed;
+    }
   } catch (e) {}
 
-  return {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || ""
-  };
+  return DEFAULT_FIREBASE_CONFIG;
 };
 
 let currentConfig = getSavedFirebaseConfig();
@@ -39,10 +44,12 @@ export const initFirebase = (customConfig = null) => {
   if (customConfig) {
     currentConfig = customConfig;
     localStorage.setItem('shiftApp_firebaseConfig', JSON.stringify(customConfig));
+  } else {
+    currentConfig = getSavedFirebaseConfig();
   }
 
   if (!isFirebaseConfigured()) {
-    console.warn('Firebase is not configured yet. Set up your config to enable real-time cloud sync.');
+    console.warn('Firebase is not configured yet.');
     return null;
   }
 
@@ -56,11 +63,11 @@ export const initFirebase = (customConfig = null) => {
   }
 };
 
-// Initialize on module load if config exists
+// Initialize immediately
 initFirebase();
 
 export const getDb = () => {
-  if (!db && isFirebaseConfigured()) {
+  if (!db) {
     return initFirebase();
   }
   return db;
