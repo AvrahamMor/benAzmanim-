@@ -9,7 +9,8 @@ export default function WaiterSubmissionView({
   weekDates, 
   onSaveSubmission, 
   existingSubmissions = [], 
-  onBackToSchedule 
+  onBackToSchedule,
+  isStandalone = false
 }) {
   const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'מוצ"ש'];
 
@@ -175,7 +176,7 @@ export default function WaiterSubmissionView({
           </div>
         </div>
 
-        {onBackToSchedule && (
+        {!isStandalone && onBackToSchedule && (
           <button 
             type="button" 
             onClick={onBackToSchedule} 

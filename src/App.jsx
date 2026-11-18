@@ -274,12 +274,21 @@ function App() {
     'מילוי אוכל'
   ];
 
-  // Detect if opened in Waiter submission mode via WhatsApp link (e.g. ?view=submit or #submit)
-  useEffect(() => {
+  // Standalone Waiter Submission Mode detection (e.g. from WhatsApp link ?view=submit or #submit)
+  // When active, waiters are completely locked into self-submission portal with zero access to schedule/manager data
+  const [isStandaloneSubmit, setIsStandaloneSubmit] = useState(() => {
+    if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
-    if (params.get('view') === 'submit' || window.location.hash === '#submit') {
-      setCurrentView('submit-portal');
-    }
+    return params.get('view') === 'submit' || window.location.hash === '#submit';
+  });
+
+  useEffect(() => {
+    const handleUrlCheck = () => {
+      const params = new URLSearchParams(window.location.search);
+      setIsStandaloneSubmit(params.get('view') === 'submit' || window.location.hash === '#submit');
+    };
+    window.addEventListener('popstate', handleUrlCheck);
+    return () => window.removeEventListener('popstate', handleUrlCheck);
   }, []);
 
   const ensureCategoriesExist = (scheduleData) => {
@@ -435,6 +444,69 @@ function App() {
     });
     return combined;
   }, [staffList, submissions]);
+
+  // Unique color coding for each waiter (makes identification instant on screen and in WhatsApp image)
+  const [showEmployeeColors, setShowEmployeeColors] = useState(() => {
+    const saved = localStorage.getItem('shiftApp_showEmployeeColors');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  const WAITER_PALETTE = useMemo(() => [
+    { id: 'blue', name: 'כחול', bg: '#eff6ff', border: '#2563eb', text: '#1e40af', darkBg: 'rgba(37, 99, 235, 0.22)', darkText: '#93c5fd' },
+    { id: 'emerald', name: 'ירוק אמרלד', bg: '#ecfdf5', border: '#059669', text: '#065f46', darkBg: 'rgba(5, 150, 105, 0.22)', darkText: '#6ee7b7' },
+    { id: 'amber', name: 'כתום-זהב', bg: '#fffbeb', border: '#d97706', text: '#92400e', darkBg: 'rgba(217, 119, 6, 0.22)', darkText: '#fcd34d' },
+    { id: 'purple', name: 'סגול', bg: '#faf5ff', border: '#9333ea', text: '#6b21a8', darkBg: 'rgba(147, 51, 234, 0.22)', darkText: '#d8b4fe' },
+    { id: 'rose', name: 'ורד-אדום', bg: '#fff1f2', border: '#e11d48', text: '#9f1239', darkBg: 'rgba(225, 29, 72, 0.22)', darkText: '#fda4af' },
+    { id: 'cyan', name: 'טורקיז', bg: '#ecfeff', border: '#0891b2', text: '#155e75', darkBg: 'rgba(8, 145, 178, 0.22)', darkText: '#67e8f9' },
+    { id: 'orange', name: 'כתום', bg: '#fff7ed', border: '#ea580c', text: '#9a3412', darkBg: 'rgba(234, 88, 12, 0.22)', darkText: '#fdba74' },
+    { id: 'indigo', name: 'אינדיגו', bg: '#eef2ff', border: '#4f46e5', text: '#3730a3', darkBg: 'rgba(79, 70, 229, 0.22)', darkText: '#a5b4fc' },
+    { id: 'teal', name: 'ירוק ים', bg: '#f0fdfa', border: '#0d9488', text: '#115e59', darkBg: 'rgba(13, 148, 136, 0.22)', darkText: '#5eead4' },
+    { id: 'pink', name: 'ורוד', bg: '#fdf2f8', border: '#db2777', text: '#9d174d', darkBg: 'rgba(219, 39, 119, 0.22)', darkText: '#f472b6' },
+    { id: 'lime', name: 'ליים', bg: '#f7fee7', border: '#65a30d', text: '#3f6212', darkBg: 'rgba(101, 163, 13, 0.22)', darkText: '#bef264' },
+    { id: 'violet', name: 'ויולט', bg: '#f5f3ff', border: '#7c3aed', text: '#5b21b6', darkBg: 'rgba(124, 58, 237, 0.22)', darkText: '#c4b5fd' },
+    { id: 'sky', name: 'תכלת', bg: '#f0f9ff', border: '#0284c7', text: '#075985', darkBg: 'rgba(2, 132, 199, 0.22)', darkText: '#7dd3fc' },
+    { id: 'yellow', name: 'חרדל', bg: '#fefce8', border: '#ca8a04', text: '#854d0e', darkBg: 'rgba(202, 138, 4, 0.22)', darkText: '#fde047' },
+    { id: 'magenta', name: 'מגנטה', bg: '#fdf4ff', border: '#c026d3', text: '#86198f', darkBg: 'rgba(192, 38, 211, 0.22)', darkText: '#f0abfc' },
+    { id: 'slate', name: 'כסוף פלדה', bg: '#f1f5f9', border: '#475569', text: '#334155', darkBg: 'rgba(71, 85, 105, 0.22)', darkText: '#cbd5e1' }
+  ], []);
+
+  const getEmployeeColor = (name) => {
+    if (!name || typeof name !== 'string') return null;
+    const clean = name.trim();
+    if (!clean) return null;
+
+    let index = allKnownEmployees.findIndex(
+      e => (e.name || '').trim().toLowerCase() === clean.toLowerCase()
+    );
+
+    if (index < 0) {
+      let hash = 0;
+      for (let i = 0; i < clean.length; i++) {
+        hash = clean.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      index = Math.abs(hash);
+    }
+
+    const pal = WAITER_PALETTE[index % WAITER_PALETTE.length];
+    return {
+      ...pal,
+      bg: isDarkMode ? pal.darkBg : pal.bg,
+      text: isDarkMode ? pal.darkText : pal.text
+    };
+  };
+
+  const activeEmployeesInCurrentSchedule = useMemo(() => {
+    const set = new Set();
+    const currentSched = shifts[currentView] || {};
+    DAYS.forEach(day => {
+      (currentSched[day] || []).forEach(slot => {
+        if (slot.employee && slot.employee.trim()) {
+          set.add(slot.employee.trim());
+        }
+      });
+    });
+    return Array.from(set).sort();
+  }, [shifts, currentView]);
 
   // Handler: Waiter submits availability
   const handleSaveSubmission = (newSub) => {
@@ -1159,18 +1231,51 @@ function App() {
       ? (availableWaitersByDay[day]?.morning || [])
       : (availableWaitersByDay[day]?.evening || []);
 
+    const empColor = slot.employee ? getEmployeeColor(slot.employee) : null;
+    const hasEmpColor = Boolean(empColor && showEmployeeColors);
+
     return (
-      <td key={day} className={`matrix-cell ${isActive ? 'active-cell' : ''} ${isConflict ? 'conflict-cell' : ''} ${isEventRole ? 'event-cell' : ''}`}>
+      <td 
+        key={day} 
+        className={`matrix-cell ${isActive ? 'active-cell' : ''} ${isConflict ? 'conflict-cell' : ''} ${isEventRole ? 'event-cell' : ''} ${hasEmpColor ? 'has-emp-color' : ''}`}
+        style={hasEmpColor ? { '--emp-accent': empColor.border } : {}}
+      >
         <div className="cell-content">
           <div className="cell-row header-row" style={{ position: 'relative' }}>
-            <input 
-              type="text" 
-              className="compact-input emp-input"
-              placeholder="שם עובד..."
-              value={slot.employee || ''}
-              onChange={(e) => updateShift(currentView, day, origIndex, 'employee', e.target.value)}
-              list="staff-list-options"
-            />
+            <div className="emp-input-wrapper" style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
+              <input 
+                type="text" 
+                className={`compact-input emp-input ${hasEmpColor ? 'colored-emp-input' : ''}`}
+                placeholder="שם עובד..."
+                value={slot.employee || ''}
+                onChange={(e) => updateShift(currentView, day, origIndex, 'employee', e.target.value)}
+                list="staff-list-options"
+                style={hasEmpColor ? {
+                  backgroundColor: empColor.bg,
+                  borderColor: empColor.border,
+                  color: empColor.text,
+                  borderWidth: '2px',
+                  fontWeight: '800'
+                } : {}}
+              />
+              {hasEmpColor && (
+                <span 
+                  className="emp-signature-dot"
+                  style={{
+                    position: 'absolute',
+                    left: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: empColor.border,
+                    pointerEvents: 'none'
+                  }}
+                  title={`צבע זיהוי של ${slot.employee}`}
+                />
+              )}
+            </div>
             {isConflict && <span className="overlap-conflict-badge">חפיפה!</span>}
             {slot.isDouble && !isConflict && <span className="double-shift-badge">כפולה</span>}
             {isEventRole && <span className="event-tag-badge">🎉 {slot.role}</span>}
@@ -1239,6 +1344,22 @@ function App() {
       </td>
     );
   };
+
+  // Standalone Waiter Submission Mode (e.g. from WhatsApp link ?view=submit or #submit)
+  // Strictly isolated: waiters cannot see or navigate to any schedules, archives, or manager views
+  if (isStandaloneSubmit) {
+    return (
+      <div className={`standalone-submit-screen ${isDarkMode ? 'dark-mode' : ''}`} dir="rtl">
+        <WaiterSubmissionView 
+          staffList={allKnownEmployees}
+          weekDates={weekDates}
+          onSaveSubmission={handleSaveSubmission}
+          existingSubmissions={submissions}
+          isStandalone={true}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="app-layout" dir="rtl">
@@ -1596,6 +1717,29 @@ function App() {
 
                 <button 
                   type="button"
+                  onClick={() => {
+                    const nextVal = !showEmployeeColors;
+                    setShowEmployeeColors(nextVal);
+                    localStorage.setItem('shiftApp_showEmployeeColors', JSON.stringify(nextVal));
+                  }}
+                  className={`btn-secondary ${showEmployeeColors ? 'active' : ''}`}
+                  title="הצג / הסתר צבע ייחודי לכל מלצר בלוח ובתמונה"
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    fontWeight: 'bold',
+                    background: showEmployeeColors ? 'rgba(212, 175, 55, 0.15)' : 'var(--input-bg)',
+                    borderColor: showEmployeeColors ? 'var(--primary-color)' : 'var(--card-border)',
+                    color: showEmployeeColors ? 'var(--primary-color)' : 'var(--text-dark)'
+                  }}
+                >
+                  <Sparkles size={16} />
+                  <span>{showEmployeeColors ? 'צבעי מלצרים: פעיל 🎨' : 'צבעי מלצרים: כבוי'}</span>
+                </button>
+
+                <button 
+                  type="button"
                   onClick={() => setCurrentView('submissions')}
                   className="btn-secondary"
                   title="מעבר למאגר הגשות המשמרות"
@@ -1634,6 +1778,36 @@ function App() {
                     <span>שבוע {formatDateFull(weekDates[0])} — {formatDateFull(weekDates[6])}</span>
                   </div>
                 </div>
+
+                {/* Waiter Color Legend - captured in exported image and visible on screen */}
+                {showEmployeeColors && activeEmployeesInCurrentSchedule.length > 0 && (
+                  <div className="schedule-color-legend-bar" dir="rtl">
+                    <div className="legend-label">
+                      <Sparkles size={14} className="legend-icon" />
+                      <span>מקרא צבעי מלצרים:</span>
+                    </div>
+                    <div className="legend-chips-wrap">
+                      {activeEmployeesInCurrentSchedule.map(emp => {
+                        const col = getEmployeeColor(emp);
+                        if (!col) return null;
+                        return (
+                          <span 
+                            key={emp} 
+                            className="emp-legend-badge"
+                            style={{ 
+                              backgroundColor: col.bg, 
+                              borderColor: col.border, 
+                              color: col.text 
+                            }}
+                          >
+                            <span className="legend-dot" style={{ backgroundColor: col.border }} />
+                            <span className="legend-emp-name">{emp}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <table className="schedule-matrix">
                   <thead>
