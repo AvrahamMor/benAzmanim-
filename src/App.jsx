@@ -5,10 +5,14 @@ import {
   LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, 
   Download, History, ChefHat, CheckCircle, UserCheck, Flame, 
   ChevronRight, ChevronLeft, CalendarDays, Sunrise, Sunset,
-  Cloud, Database, Settings, Check, X, ExternalLink, Share2
+  Cloud, Database, Settings, Check, X, ExternalLink, Share2,
+  Send, Sparkles, Menu, ClipboardList, UserPlus, Smartphone
 } from 'lucide-react';
 import initialSchedule from './schedule.json';
 import initialStaff from './staff.json';
+import initialSubmissions from './submissions.json';
+import WaiterSubmissionView from './components/WaiterSubmissionView.jsx';
+import SubmissionsPoolView from './components/SubmissionsPoolView.jsx';
 import { 
   isFirebaseConfigured, 
   getFirebaseConfig, 
@@ -18,7 +22,9 @@ import {
   subscribeToStaff, 
   saveStaffToCloud, 
   subscribeToArchives, 
-  saveArchiveToCloud 
+  saveArchiveToCloud,
+  subscribeToSubmissions,
+  saveSubmissionsToCloud
 } from './firebase.js';
 import './App.css';
 
@@ -107,6 +113,11 @@ function App() {
   // Export / Image Preview State (Cross-Platform & iPad Compatible)
   const [isExporting, setIsExporting] = useState(false);
   const [previewModal, setPreviewModal] = useState({ isOpen: false, imageUrl: '', title: '', fileName: '' });
+
+  // Mobile & iPad Navigation Drawer & View State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mobileActiveDay, setMobileActiveDay] = useState('ראשון');
+  const [mobileViewMode, setMobileViewMode] = useState('table'); // 'table' or 'day'
 
   // Firebase Configuration & State
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false);
@@ -240,7 +251,21 @@ function App() {
   });
   const [newStaffName, setNewStaffName] = useState('');
 
+  // Shift Submissions Pool (New waiter requests database)
+  const [submissions, setSubmissions] = useState(() => {
+    const saved = localStorage.getItem('shiftApp_submissions');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return Array.isArray(initialSubmissions) ? initialSubmissions : [];
+  });
+
   const PREDEFINED_ROLES = [
+    'אירוע',
+    'אחראי אירוע',
     'מנהל משמרת',
     'אחראי קופה',
     'מארחת',
@@ -248,6 +273,14 @@ function App() {
     'פס קר',
     'מילוי אוכל'
   ];
+
+  // Detect if opened in Waiter submission mode via WhatsApp link (e.g. ?view=submit or #submit)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'submit' || window.location.hash === '#submit') {
+      setCurrentView('submit-portal');
+    }
+  }, []);
 
   const ensureCategoriesExist = (scheduleData) => {
     if (!scheduleData) return {};
@@ -290,7 +323,7 @@ function App() {
   const [selectedArchiveWeek, setSelectedArchiveWeek] = useState(null);
   const [selectedPersonalWeekId, setSelectedPersonalWeekId] = useState('current');
 
-  // Load local dev archives if available
+  // Load local dev archives & submissions if available
   useEffect(() => {
     fetch('/api/get-archives')
       .then(res => res.json())
@@ -298,6 +331,16 @@ function App() {
         if (Array.isArray(data) && data.length > 0) {
           setArchives(data);
           localStorage.setItem('shiftApp_archives', JSON.stringify(data));
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/get-submissions')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setSubmissions(data);
+          localStorage.setItem('shiftApp_submissions', JSON.stringify(data));
         }
       })
       .catch(() => {});
@@ -331,12 +374,177 @@ function App() {
       }
     });
 
+    // 4. Subscribe to shift submissions pool in Firestore
+    const unsubSubmissions = subscribeToSubmissions((cloudSubmissions) => {
+      if (cloudSubmissions && Array.isArray(cloudSubmissions)) {
+        setSubmissions(cloudSubmissions);
+        localStorage.setItem('shiftApp_submissions', JSON.stringify(cloudSubmissions));
+      }
+    });
+
     return () => {
       if (unsubSchedule) unsubSchedule();
       if (unsubStaff) unsubStaff();
       if (unsubArchives) unsubArchives();
+      if (unsubSubmissions) unsubSubmissions();
     };
   }, [isCloudConnected]);
+
+  // Available waiters grouped by day and shift type (derived from submissions)
+  const availableWaitersByDay = useMemo(() => {
+    const map = {};
+    DAYS.forEach(day => {
+      map[day] = {
+        morning: [],
+        evening: [],
+        all: []
+      };
+    });
+
+    submissions.forEach(sub => {
+      DAYS.forEach(day => {
+        const d = sub.days?.[day];
+        if (d && !d.off) {
+          const empName = sub.employeeName;
+          if (d.morning) map[day].morning.push({ name: empName, note: d.note });
+          if (d.evening) map[day].evening.push({ name: empName, note: d.note });
+          if (d.morning || d.evening) {
+            map[day].all.push({ 
+              name: empName, 
+              shifts: [d.morning && 'בוקר', d.evening && 'ערב'].filter(Boolean).join('/'),
+              note: d.note 
+            });
+          }
+        }
+      });
+    });
+
+    return map;
+  }, [submissions]);
+
+  // Combined list of all known staff including newly submitted waiters
+  const allKnownEmployees = useMemo(() => {
+    const names = new Set(staffList.map(s => s.name.trim().toLowerCase()));
+    const combined = [...staffList];
+    submissions.forEach(sub => {
+      const clean = (sub.employeeName || '').trim();
+      if (clean && !names.has(clean.toLowerCase())) {
+        names.add(clean.toLowerCase());
+        combined.push({ id: sub.id, name: clean });
+      }
+    });
+    return combined;
+  }, [staffList, submissions]);
+
+  // Handler: Waiter submits availability
+  const handleSaveSubmission = (newSub) => {
+    setSubmissions(prev => {
+      const existingIdx = prev.findIndex(s => 
+        (s.employeeName || '').trim().toLowerCase() === (newSub.employeeName || '').trim().toLowerCase()
+      );
+      let updated;
+      if (existingIdx >= 0) {
+        updated = [...prev];
+        updated[existingIdx] = newSub;
+      } else {
+        updated = [...prev, newSub];
+      }
+
+      localStorage.setItem('shiftApp_submissions', JSON.stringify(updated));
+      saveSubmissionsToCloud(updated);
+
+      fetch('/api/save-submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      }).catch(() => {});
+
+      return updated;
+    });
+
+    // If new waiter name is not in staffList, also add to staffList
+    if (newSub.employeeName) {
+      setStaffList(prevStaff => {
+        const cleanName = newSub.employeeName.trim();
+        const exists = prevStaff.some(s => s.name.trim().toLowerCase() === cleanName.toLowerCase());
+        if (!exists) {
+          const updatedStaff = [...prevStaff, { id: Date.now(), name: cleanName }];
+          localStorage.setItem('shiftApp_staffList', JSON.stringify(updatedStaff));
+          saveStaffToCloud(updatedStaff);
+          return updatedStaff;
+        }
+        return prevStaff;
+      });
+    }
+  };
+
+  // Handler: Manager updates submissions list
+  const handleUpdateSubmissions = (updatedList) => {
+    setSubmissions(updatedList);
+    localStorage.setItem('shiftApp_submissions', JSON.stringify(updatedList));
+    saveSubmissionsToCloud(updatedList);
+
+    fetch('/api/save-submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedList)
+    }).catch(() => {});
+  };
+
+  // Handler: Smart auto-assign from submission to schedule
+  const handleAutoAssignToSchedule = (submission) => {
+    const targetCategory = submission.preferredCategory || (CATEGORIES.includes(currentView) ? currentView : 'מסעדה');
+    let assignedCount = 0;
+
+    setShifts(prev => {
+      const newShifts = JSON.parse(JSON.stringify(prev));
+      if (!newShifts[targetCategory]) return prev;
+
+      DAYS.forEach(day => {
+        const dayReq = submission.days?.[day];
+        if (!dayReq || dayReq.off) return;
+
+        const daySlots = newShifts[targetCategory][day] || [];
+
+        // Try assigning morning shift if requested
+        if (dayReq.morning) {
+          const emptyMorningSlot = daySlots.find(s => {
+            const h = parseInt((s.start || '12:00').split(':')[0], 10);
+            return (!s.employee || s.employee.trim() === '') && h < 16;
+          });
+          if (emptyMorningSlot) {
+            emptyMorningSlot.employee = submission.employeeName;
+            assignedCount++;
+          }
+        }
+
+        // Try assigning evening shift if requested
+        if (dayReq.evening) {
+          const emptyEveningSlot = daySlots.find(s => {
+            const h = parseInt((s.start || '17:00').split(':')[0], 10);
+            return (!s.employee || s.employee.trim() === '') && h >= 16;
+          });
+          if (emptyEveningSlot) {
+            emptyEveningSlot.employee = submission.employeeName;
+            assignedCount++;
+          }
+        }
+      });
+
+      localStorage.setItem('shiftApp_shifts', JSON.stringify(newShifts));
+      saveScheduleToCloud(newShifts);
+
+      fetch('/api/save-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newShifts)
+      }).catch(() => {});
+
+      return newShifts;
+    });
+
+    alert(`העובד "${submission.employeeName}" שובץ ב-${assignedCount} משמרות במחלקת "${targetCategory}"!\nתוכל לראות את השיבוץ בלוח ולשנות כרצונך.`);
+  };
 
   // Dark mode effect
   useEffect(() => {
@@ -357,8 +565,13 @@ function App() {
       const newShifts = JSON.parse(JSON.stringify(prev));
       let startT = '17:00';
       let endT = '01:00';
+      let defaultRole = '';
 
-      if (category === 'בייגל') {
+      if (section === 'event') {
+        startT = '18:00';
+        endT = '01:00';
+        defaultRole = 'אירוע';
+      } else if (category === 'בייגל') {
         if (section === 'morning') {
           startT = '07:00';
           endT = '15:00';
@@ -381,7 +594,7 @@ function App() {
 
       DAYS.forEach(day => {
         if (!newShifts[category][day]) newShifts[category][day] = [];
-        newShifts[category][day].push({ employee: '', role: '', start: startT, end: endT });
+        newShifts[category][day].push({ employee: '', role: defaultRole, start: startT, end: endT });
       });
 
       // Save to localStorage & Cloud & Local Dev API
@@ -933,20 +1146,158 @@ function App() {
     });
   }
 
+  // Reusable Matrix Cell Renderer with Event Role toggle & Available Waiters helper
+  const renderShiftCell = (slot, day, section) => {
+    if (!slot) return <td key={day} className="matrix-cell empty-cell"></td>;
+    
+    const isActive = slot.employee || slot.role;
+    const origIndex = slot.originalIndex;
+    const isConflict = slot.hasOverlapConflict;
+    const isEventRole = slot.role && slot.role.includes('אירוע');
+
+    const availableList = section === 'morning' 
+      ? (availableWaitersByDay[day]?.morning || [])
+      : (availableWaitersByDay[day]?.evening || []);
+
+    return (
+      <td key={day} className={`matrix-cell ${isActive ? 'active-cell' : ''} ${isConflict ? 'conflict-cell' : ''} ${isEventRole ? 'event-cell' : ''}`}>
+        <div className="cell-content">
+          <div className="cell-row header-row" style={{ position: 'relative' }}>
+            <input 
+              type="text" 
+              className="compact-input emp-input"
+              placeholder="שם עובד..."
+              value={slot.employee || ''}
+              onChange={(e) => updateShift(currentView, day, origIndex, 'employee', e.target.value)}
+              list="staff-list-options"
+            />
+            {isConflict && <span className="overlap-conflict-badge">חפיפה!</span>}
+            {slot.isDouble && !isConflict && <span className="double-shift-badge">כפולה</span>}
+            {isEventRole && <span className="event-tag-badge">🎉 {slot.role}</span>}
+            <button 
+              className="clear-cell-btn" 
+              onClick={() => clearSlot(currentView, day, origIndex)}
+              title="מחק משמרת זו לחלוטין"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+          <div className="cell-row role-cell-row">
+            <input 
+              type="text" 
+              className={`compact-input role-input ${isEventRole ? 'event-role-input' : ''}`}
+              placeholder="תפקיד..."
+              value={slot.role || ''}
+              onChange={(e) => updateShift(currentView, day, origIndex, 'role', e.target.value)}
+              list="roles-list"
+            />
+            <button 
+              type="button"
+              className={`quick-event-btn ${isEventRole ? 'active' : ''}`}
+              onClick={() => {
+                const nextRole = isEventRole ? '' : 'אירוע';
+                updateShift(currentView, day, origIndex, 'role', nextRole);
+              }}
+              title={isEventRole ? "בטל שיוך אירוע" : "שייך לתפקיד אירוע 🎉"}
+            >
+              🎉
+            </button>
+          </div>
+          <div className="cell-row time-row">
+            <input 
+              type="time" 
+              className="compact-time"
+              value={slot.start || ''}
+              onChange={(e) => updateShift(currentView, day, origIndex, 'start', e.target.value)}
+            />
+            <span>-</span>
+            <input 
+              type="time" 
+              className="compact-time"
+              value={slot.end || ''}
+              onChange={(e) => updateShift(currentView, day, origIndex, 'end', e.target.value)}
+            />
+          </div>
+
+          {!slot.employee && availableList.length > 0 && (
+            <div className="slot-avail-hint">
+              <span className="avail-hint-label">זמינים:</span>
+              {availableList.slice(0, 2).map((w, wi) => (
+                <button 
+                  key={wi}
+                  type="button" 
+                  className="btn-quick-fill-chip"
+                  onClick={() => updateShift(currentView, day, origIndex, 'employee', w.name)}
+                  title={`שבץ את ${w.name}${w.note ? ` (${w.note})` : ''}`}
+                >
+                  + {w.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </td>
+    );
+  };
+
   return (
     <div className="app-layout" dir="rtl">
       
+      {/* Mobile/iPad Drawer Backdrop */}
+      {isMobileMenuOpen && (
+        <div className="sidebar-backdrop" onClick={() => setIsMobileMenuOpen(false)} />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-logo">
           <Calendar size={28} />
           <h2>מערכת שיבוץ</h2>
+          {isMobileMenuOpen && (
+            <button 
+              type="button" 
+              onClick={() => setIsMobileMenuOpen(false)} 
+              style={{ marginRight: 'auto', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+            >
+              <X size={20} />
+            </button>
+          )}
         </div>
         
         <nav className="sidebar-nav">
+          {/* Shift Submissions Pool (Waiters Availability Database) */}
+          <button 
+            className={`nav-item ${currentView === 'submissions' ? 'active' : ''}`}
+            onClick={() => { setCurrentView('submissions'); setIsMobileMenuOpen(false); }}
+            style={{ 
+              background: currentView === 'submissions' ? 'var(--primary-color)' : 'rgba(212, 175, 55, 0.08)',
+              color: currentView === 'submissions' ? '#ffffff' : 'var(--text-dark)',
+              border: '1.5px solid var(--primary-color)'
+            }}
+          >
+            <ClipboardList size={20} />
+            <span>מאגר הגשות שבועי</span>
+            <div className="badge" style={{ background: '#10b981', color: '#fff' }}>{submissions.length}</div>
+          </button>
+
+          {/* Waiter Mobile Self-Submission Portal */}
+          <button 
+            className={`nav-item ${currentView === 'submit-portal' ? 'active' : ''}`}
+            onClick={() => { setCurrentView('submit-portal'); setIsMobileMenuOpen(false); }}
+            style={{ 
+              background: currentView === 'submit-portal' ? '#10b981' : 'rgba(16, 185, 129, 0.08)',
+              color: currentView === 'submit-portal' ? '#ffffff' : 'var(--text-dark)',
+              border: '1.5px solid #10b981'
+            }}
+          >
+            <Send size={20} />
+            <span>הגשת משמרות</span>
+            <div className="badge" style={{ background: '#2563eb', color: '#fff' }}>נייד 📱</div>
+          </button>
+
           <button 
             className={`nav-item ${currentView === 'employees' ? 'active' : ''}`}
-            onClick={() => setCurrentView('employees')}
+            onClick={() => { setCurrentView('employees'); setIsMobileMenuOpen(false); }}
           >
             <Users size={20} />
             <span>רשימת עובדים</span>
@@ -955,7 +1306,7 @@ function App() {
 
           <button 
             className={`nav-item ${currentView === 'personal' ? 'active' : ''}`}
-            onClick={() => setCurrentView('personal')}
+            onClick={() => { setCurrentView('personal'); setIsMobileMenuOpen(false); }}
           >
             <User size={20} />
             <span>לו"ז עובד אישי</span>
@@ -963,7 +1314,7 @@ function App() {
           
           <button 
             className={`nav-item ${currentView === 'archives' ? 'active' : ''}`}
-            onClick={() => { setCurrentView('archives'); setSelectedArchiveWeek(null); }}
+            onClick={() => { setCurrentView('archives'); setSelectedArchiveWeek(null); setIsMobileMenuOpen(false); }}
           >
             <History size={20} />
             <span>ארכיון שבועות</span>
@@ -975,7 +1326,7 @@ function App() {
             <button
               key={cat}
               className={`nav-item ${currentView === cat ? 'active' : ''}`}
-              onClick={() => setCurrentView(cat)}
+              onClick={() => { setCurrentView(cat); setIsMobileMenuOpen(false); }}
             >
               {getCategoryIcon(cat)}
               <span>{cat}</span>
@@ -1015,6 +1366,55 @@ function App() {
 
       {/* Main Content Area */}
       <main className="main-content">
+        
+        {/* Top Header Bar for Mobile & Tablet (iPad) */}
+        <div className="mobile-app-header">
+          <button 
+            type="button" 
+            className="btn-mobile-menu"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            title="פתח תפריט ניווט"
+          >
+            {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+
+          <div className="mobile-brand-title">
+            <Utensils size={20} style={{ color: 'var(--primary-color)' }} />
+            <span>
+              {currentView === 'submissions' 
+                ? 'מאגר הגשות שבועי' 
+                : currentView === 'submit-portal' 
+                ? 'הגשת משמרות' 
+                : currentView === 'employees' 
+                ? 'רשימת עובדים' 
+                : currentView === 'personal' 
+                ? 'לו"ז אישי' 
+                : currentView === 'archives' 
+                ? 'ארכיון שבועות' 
+                : `סידור: ${currentView}`}
+            </span>
+          </div>
+
+          <div className="mobile-header-quick-links">
+            <button 
+              type="button"
+              className={`mobile-quick-btn ${currentView === 'submissions' ? 'active' : ''}`}
+              onClick={() => setCurrentView('submissions')}
+              title="מאגר הגשות משמרות"
+            >
+              <ClipboardList size={16} />
+              <span>({submissions.length})</span>
+            </button>
+            <button 
+              type="button"
+              className="mobile-quick-btn"
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              title="החלף מצב יום/לילה"
+            >
+              {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+          </div>
+        </div>
         
         {conflicts.length > 0 && (
           <div className="conflicts-container">
@@ -1153,7 +1553,7 @@ function App() {
                 <p>ניהול משמרות יומי ושבועי לפי לוח שנה ישראל</p>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 {/* Week Navigator */}
                 <div className="week-nav-widget">
                   <button 
@@ -1193,12 +1593,36 @@ function App() {
                 >
                   <Download size={18} /> {isExporting ? 'מעבד תמונה...' : 'הורד סידור עבודה'}
                 </button>
+
+                <button 
+                  type="button"
+                  onClick={() => setCurrentView('submissions')}
+                  className="btn-secondary"
+                  title="מעבר למאגר הגשות המשמרות"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
+                >
+                  <ClipboardList size={16} />
+                  <span>מאגר הגשות ({submissions.length})</span>
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={() => setCurrentView('submit-portal')}
+                  className="btn-secondary"
+                  title="הגשת משמרות למלצרים בנייד"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
+                >
+                  <Send size={16} />
+                  <span>הגשת משמרות 📱</span>
+                </button>
               </div>
             </div>
 
             <div className="board">
-              <div id="schedule-export-target" className="table-wrapper">
-                <div className="export-schedule-banner">
+              <div id="schedule-export-target" className={`table-wrapper ${isExporting ? 'is-exporting' : ''}`}>
+                
+                {/* Header Banner for Exported Image Only (Hidden on Interactive Screen to prevent 2-pages look on iPad) */}
+                <div className={`export-schedule-banner ${isExporting ? 'force-show' : ''}`} style={{ display: isExporting ? 'flex' : 'none' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ color: 'var(--primary-color)' }}>{getCategoryIcon(currentView)}</span>
                     <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-dark)' }}>
@@ -1218,6 +1642,7 @@ function App() {
                       {DAYS.map((day, dayIndex) => {
                         const dayDate = weekDates[dayIndex];
                         const today = isToday(dayDate);
+                        const availWaiters = availableWaitersByDay[day]?.all || [];
                         return (
                           <th key={day} className={today ? 'today-col-header' : ''}>
                             <div className="day-header-content">
@@ -1226,6 +1651,14 @@ function App() {
                                 {formatDateShort(dayDate)}
                                 {today && <span className="today-star">⭐</span>}
                               </span>
+                              {availWaiters.length > 0 && (
+                                <span 
+                                  className="day-available-count-badge" 
+                                  title={availWaiters.map(w => `${w.name} (${w.shifts})${w.note ? `: ${w.note}` : ''}`).join('\n')}
+                                >
+                                  👥 {availWaiters.length} פנויים
+                                </span>
+                              )}
                             </div>
                           </th>
                         );
@@ -1287,62 +1720,7 @@ function App() {
                               );
                             }
                             const slot = processed.morning[day]?.[rowIndex];
-                            if (!slot) return <td key={day} className="matrix-cell empty-cell"></td>;
-                            
-                            const isActive = slot.employee || slot.role;
-                            const origIndex = slot.originalIndex;
-                            const isConflict = slot.hasOverlapConflict;
-
-                            return (
-                              <td key={day} className={`matrix-cell ${isActive ? 'active-cell' : ''} ${isConflict ? 'conflict-cell' : ''}`}>
-                                <div className="cell-content">
-                                  <div className="cell-row header-row" style={{ position: 'relative' }}>
-                                    <input 
-                                      type="text" 
-                                      className="compact-input emp-input"
-                                      placeholder="שם עובד..."
-                                      value={slot.employee || ''}
-                                      onChange={(e) => updateShift(currentView, day, origIndex, 'employee', e.target.value)}
-                                      list="staff-list-options"
-                                    />
-                                    {isConflict && <span className="overlap-conflict-badge">חפיפה!</span>}
-                                    {slot.isDouble && !isConflict && <span className="double-shift-badge">כפולה</span>}
-                                    <button 
-                                      className="clear-cell-btn" 
-                                      onClick={() => clearSlot(currentView, day, origIndex)}
-                                      title="מחק משמרת זו לחלוטין"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
-                                  <div className="cell-row">
-                                    <input 
-                                      type="text" 
-                                      className="compact-input role-input"
-                                      placeholder="תפקיד..."
-                                      value={slot.role || ''}
-                                      onChange={(e) => updateShift(currentView, day, origIndex, 'role', e.target.value)}
-                                      list="roles-list"
-                                    />
-                                  </div>
-                                  <div className="cell-row time-row">
-                                    <input 
-                                      type="time" 
-                                      className="compact-time"
-                                      value={slot.start || ''}
-                                      onChange={(e) => updateShift(currentView, day, origIndex, 'start', e.target.value)}
-                                    />
-                                    <span>-</span>
-                                    <input 
-                                      type="time" 
-                                      className="compact-time"
-                                      value={slot.end || ''}
-                                      onChange={(e) => updateShift(currentView, day, origIndex, 'end', e.target.value)}
-                                    />
-                                  </div>
-                                </div>
-                              </td>
-                            );
+                            return renderShiftCell(slot, day, 'morning');
                           })}
                         </tr>
                       );
@@ -1400,62 +1778,7 @@ function App() {
                                   );
                                 }
                                 const slot = processed.mid?.[day]?.[rowIndex];
-                                if (!slot) return <td key={day} className="matrix-cell empty-cell"></td>;
-                                
-                                const isActive = slot.employee || slot.role;
-                                const origIndex = slot.originalIndex;
-                                const isConflict = slot.hasOverlapConflict;
-
-                                return (
-                                  <td key={day} className={`matrix-cell ${isActive ? 'active-cell' : ''} ${isConflict ? 'conflict-cell' : ''}`}>
-                                    <div className="cell-content">
-                                      <div className="cell-row header-row" style={{ position: 'relative' }}>
-                                        <input 
-                                          type="text" 
-                                          className="compact-input emp-input"
-                                          placeholder="שם עובד..."
-                                          value={slot.employee || ''}
-                                          onChange={(e) => updateShift(currentView, day, origIndex, 'employee', e.target.value)}
-                                          list="staff-list-options"
-                                        />
-                                        {isConflict && <span className="overlap-conflict-badge">חפיפה!</span>}
-                                        {slot.isDouble && !isConflict && <span className="double-shift-badge">כפולה</span>}
-                                        <button 
-                                          className="clear-cell-btn" 
-                                          onClick={() => clearSlot(currentView, day, origIndex)}
-                                          title="מחק משמרת זו לחלוטין"
-                                        >
-                                          <Trash2 size={14} />
-                                        </button>
-                                      </div>
-                                      <div className="cell-row">
-                                        <input 
-                                          type="text" 
-                                          className="compact-input role-input"
-                                          placeholder="תפקיד..."
-                                          value={slot.role || ''}
-                                          onChange={(e) => updateShift(currentView, day, origIndex, 'role', e.target.value)}
-                                          list="roles-list"
-                                        />
-                                      </div>
-                                      <div className="cell-row time-row">
-                                        <input 
-                                          type="time" 
-                                          className="compact-time"
-                                          value={slot.start || ''}
-                                          onChange={(e) => updateShift(currentView, day, origIndex, 'start', e.target.value)}
-                                        />
-                                        <span>-</span>
-                                        <input 
-                                          type="time" 
-                                          className="compact-time"
-                                          value={slot.end || ''}
-                                          onChange={(e) => updateShift(currentView, day, origIndex, 'end', e.target.value)}
-                                        />
-                                      </div>
-                                    </div>
-                                  </td>
-                                );
+                                return renderShiftCell(slot, day, 'mid');
                               })}
                             </tr>
                           );
@@ -1474,6 +1797,13 @@ function App() {
                             style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}
                           >
                             <Plus size={16} /> הוסף ערב
+                          </button>
+                          <button 
+                            onClick={() => addRow(currentView, 'event')}
+                            title="הוסף שורת אירוע (18:00 - 01:00)"
+                            className="btn-add-event-row"
+                          >
+                            <Sparkles size={16} /> הוסף אירוע 🎉
                           </button>
                         </div>
                       </td>
@@ -1517,62 +1847,7 @@ function App() {
                               );
                             }
                             const slot = processed.evening[day]?.[rowIndex];
-                            if (!slot) return <td key={day} className="matrix-cell empty-cell"></td>;
-                            
-                            const isActive = slot.employee || slot.role;
-                            const origIndex = slot.originalIndex;
-                            const isConflict = slot.hasOverlapConflict;
-
-                            return (
-                              <td key={day} className={`matrix-cell ${isActive ? 'active-cell' : ''} ${isConflict ? 'conflict-cell' : ''}`}>
-                                <div className="cell-content">
-                                  <div className="cell-row header-row" style={{ position: 'relative' }}>
-                                    <input 
-                                      type="text" 
-                                      className="compact-input emp-input"
-                                      placeholder="שם עובד..."
-                                      value={slot.employee || ''}
-                                      onChange={(e) => updateShift(currentView, day, origIndex, 'employee', e.target.value)}
-                                      list="staff-list-options"
-                                    />
-                                    {isConflict && <span className="overlap-conflict-badge">חפיפה!</span>}
-                                    {slot.isDouble && !isConflict && <span className="double-shift-badge">כפולה</span>}
-                                    <button 
-                                      className="clear-cell-btn" 
-                                      onClick={() => clearSlot(currentView, day, origIndex)}
-                                      title="מחק משמרת זו לחלוטין"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
-                                  <div className="cell-row">
-                                    <input 
-                                      type="text" 
-                                      className="compact-input role-input"
-                                      placeholder="תפקיד..."
-                                      value={slot.role || ''}
-                                      onChange={(e) => updateShift(currentView, day, origIndex, 'role', e.target.value)}
-                                      list="roles-list"
-                                    />
-                                  </div>
-                                  <div className="cell-row time-row">
-                                    <input 
-                                      type="time" 
-                                      className="compact-time"
-                                      value={slot.start || ''}
-                                      onChange={(e) => updateShift(currentView, day, origIndex, 'start', e.target.value)}
-                                    />
-                                    <span>-</span>
-                                    <input 
-                                      type="time" 
-                                      className="compact-time"
-                                      value={slot.end || ''}
-                                      onChange={(e) => updateShift(currentView, day, origIndex, 'end', e.target.value)}
-                                    />
-                                  </div>
-                                </div>
-                              </td>
-                            );
+                            return renderShiftCell(slot, day, 'evening');
                           })}
                         </tr>
                       );
@@ -1581,23 +1856,50 @@ function App() {
                 </table>
               </div>
               <div style={{ padding: '16px', textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
-                <button onClick={() => addRow(currentView, 'morning')} className="btn-primary" style={{ minWidth: '180px' }}>
+                <button onClick={() => addRow(currentView, 'morning')} className="btn-primary" style={{ minWidth: '160px' }}>
                    <Plus size={18} /> הוסף שורת בוקר
                 </button>
                 {currentView === 'בייגל' && (
-                  <button onClick={() => addRow(currentView, 'mid')} className="btn-primary" style={{ background: '#f59e0b', minWidth: '180px' }}>
+                  <button onClick={() => addRow(currentView, 'mid')} className="btn-primary" style={{ background: '#f59e0b', minWidth: '160px' }}>
                      <Plus size={18} /> הוסף שורת ביניים
                   </button>
                 )}
-                <button onClick={() => addRow(currentView, 'evening')} className="btn-primary" style={{ background: '#4f46e5', minWidth: '180px' }}>
+                <button onClick={() => addRow(currentView, 'evening')} className="btn-primary" style={{ background: '#4f46e5', minWidth: '160px' }}>
                    <Plus size={18} /> הוסף שורת ערב
                 </button>
-                <button onClick={() => removeRow(currentView)} className="btn-primary" style={{ background: '#ef4444', minWidth: '180px' }}>
+                <button onClick={() => addRow(currentView, 'event')} className="btn-add-event-row" style={{ minWidth: '160px' }}>
+                   <Sparkles size={18} /> הוסף שורת אירוע 🎉
+                </button>
+                <button onClick={() => removeRow(currentView)} className="btn-primary" style={{ background: '#ef4444', minWidth: '160px' }}>
                    <Trash2 size={18} /> מחק שורה אחרונה
                 </button>
               </div>
             </div>
           </div>
+        )}
+
+        {/* Shift Submissions Pool View (Manager Control Center) */}
+        {currentView === 'submissions' && (
+          <SubmissionsPoolView 
+            submissions={submissions}
+            staffList={staffList}
+            weekDates={weekDates}
+            onUpdateSubmissions={handleUpdateSubmissions}
+            onAutoAssignToSchedule={handleAutoAssignToSchedule}
+            onBackToSchedule={() => setCurrentView('מסעדה')}
+            currentCategory={CATEGORIES.includes(currentView) ? currentView : 'מסעדה'}
+          />
+        )}
+
+        {/* Waiter Self-Service Submission Portal (Mobile-First) */}
+        {currentView === 'submit-portal' && (
+          <WaiterSubmissionView 
+            staffList={allKnownEmployees}
+            weekDates={weekDates}
+            onSaveSubmission={handleSaveSubmission}
+            existingSubmissions={submissions}
+            onBackToSchedule={() => setCurrentView('מסעדה')}
+          />
         )}
         
         {/* Personal Schedule View */}
@@ -1827,8 +2129,26 @@ function App() {
                             <td style={{ color: '#10b981', fontWeight: 'bold', textAlign: 'center', padding: '14px 18px', fontSize: '0.95rem' }}>
                               {item.hours.toFixed(1)} שעות
                             </td>
-                            <td style={{ color: 'var(--primary-color)', fontWeight: 'bold', padding: '14px 18px' }}>
-                              {item.shift.role || '---'}
+                            <td style={{ fontWeight: 'bold', padding: '14px 18px' }}>
+                              {item.shift.role && item.shift.role.includes('אירוע') ? (
+                                <span style={{ 
+                                  background: 'rgba(124, 58, 237, 0.15)', 
+                                  color: '#7c3aed', 
+                                  padding: '4px 12px', 
+                                  borderRadius: '8px', 
+                                  border: '1px solid rgba(124, 58, 237, 0.3)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  fontSize: '0.95rem'
+                                }}>
+                                  🎉 {item.shift.role}
+                                </span>
+                              ) : (
+                                <span style={{ color: 'var(--primary-color)' }}>
+                                  {item.shift.role || '---'}
+                                </span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -1847,7 +2167,7 @@ function App() {
 
         {/* Datalists */}
         <datalist id="staff-list-options">
-          {staffList.map(s => <option key={s.id} value={s.name} />)}
+          {allKnownEmployees.map(s => <option key={s.id || s.name} value={s.name} />)}
         </datalist>
         <datalist id="roles-list">
           {PREDEFINED_ROLES.map((r, i) => <option key={i} value={r} />)}
@@ -2105,6 +2425,41 @@ function App() {
             </div>
           </div>
         )}
+        {/* Mobile Bottom Navigation Bar */}
+        <div className="mobile-bottom-nav">
+          <button 
+            type="button"
+            className={`bottom-nav-item ${CATEGORIES.includes(currentView) ? 'active' : ''}`}
+            onClick={() => setCurrentView('מסעדה')}
+          >
+            <Utensils size={18} />
+            <span>סידור עבודה</span>
+          </button>
+          <button 
+            type="button"
+            className={`bottom-nav-item ${currentView === 'submit-portal' ? 'active' : ''}`}
+            onClick={() => setCurrentView('submit-portal')}
+          >
+            <Send size={18} />
+            <span>הגשת משמרות</span>
+          </button>
+          <button 
+            type="button"
+            className={`bottom-nav-item ${currentView === 'submissions' ? 'active' : ''}`}
+            onClick={() => setCurrentView('submissions')}
+          >
+            <Users size={18} />
+            <span>מאגר ({submissions.length})</span>
+          </button>
+          <button 
+            type="button"
+            className={`bottom-nav-item ${currentView === 'personal' ? 'active' : ''}`}
+            onClick={() => setCurrentView('personal')}
+          >
+            <User size={18} />
+            <span>לו"ז אישי</span>
+          </button>
+        </div>
       </main>
     </div>
   );

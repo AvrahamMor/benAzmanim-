@@ -85,6 +85,53 @@ function saveSchedulePlugin() {
           res.end('Method Not Allowed');
         }
       });
+
+      server.middlewares.use('/api/save-submissions', (req, res) => {
+        if (req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            try {
+              const subPath = path.join(__dirname, 'src', 'submissions.json');
+              const parsed = JSON.parse(body);
+              fs.writeFileSync(subPath, JSON.stringify(parsed, null, 2) + '\n');
+              res.statusCode = 200;
+              res.end(JSON.stringify({ success: true }));
+            } catch (err) {
+              console.error('Error saving submissions.json:', err);
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: err.message }));
+            }
+          });
+        } else {
+          res.statusCode = 405;
+          res.end('Method Not Allowed');
+        }
+      });
+
+      server.middlewares.use('/api/get-submissions', (req, res) => {
+        if (req.method === 'GET') {
+          try {
+            const subPath = path.join(__dirname, 'src', 'submissions.json');
+            let subs = [];
+            if (fs.existsSync(subPath)) {
+              subs = JSON.parse(fs.readFileSync(subPath, 'utf8'));
+            }
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(subs));
+          } catch (err) {
+            console.error('Error reading submissions.json:', err);
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        } else {
+          res.statusCode = 405;
+          res.end('Method Not Allowed');
+        }
+      });
     }
   };
 }

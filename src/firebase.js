@@ -197,3 +197,42 @@ export const saveArchiveToCloud = async (archiveData) => {
     console.error('Error saving archive to Firebase:', err);
   }
 };
+
+// Real-time listener for shift submissions (waiter requests pool)
+export const subscribeToSubmissions = (callback) => {
+  const database = getDb();
+  if (!database) return null;
+
+  try {
+    const docRef = doc(database, 'shift_submissions', 'current');
+    return onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data && Array.isArray(data.list)) {
+          callback(data.list);
+        }
+      }
+    }, (error) => {
+      console.warn('Firestore submissions listener error:', error);
+    });
+  } catch (e) {
+    console.error('Failed to subscribe to submissions:', e);
+    return null;
+  }
+};
+
+// Save shift submissions list to Firestore
+export const saveSubmissionsToCloud = async (submissionsList) => {
+  const database = getDb();
+  if (!database) return;
+
+  try {
+    const docRef = doc(database, 'shift_submissions', 'current');
+    await setDoc(docRef, {
+      list: submissionsList,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.error('Error saving submissions to Firebase:', err);
+  }
+};
