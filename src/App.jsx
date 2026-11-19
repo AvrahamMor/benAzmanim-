@@ -1,7 +1,7 @@
 import html2canvas from 'html2canvas';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  AlertCircle, Calendar, Clock, User, Briefcase, Trash2, Users, 
+  AlertCircle, AlertTriangle, Calendar, Clock, User, Briefcase, Trash2, Users, 
   LayoutDashboard, Utensils, Coffee, Store, Plus, Save, Moon, Sun, 
   Download, History, ChefHat, CheckCircle, UserCheck, Flame, 
   ChevronRight, ChevronLeft, CalendarDays, Sunrise, Sunset,
@@ -394,6 +394,16 @@ function App() {
 
   const [selectedArchiveWeek, setSelectedArchiveWeek] = useState(null);
   const [selectedPersonalWeekId, setSelectedPersonalWeekId] = useState('current');
+
+  // Real-time toast alert when manager assigns a waiter who did not request that day/shift
+  const [assignmentWarningToast, setAssignmentWarningToast] = useState(null);
+  const toastTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   // Load local dev archives & submissions if available
   useEffect(() => {
@@ -1033,7 +1043,140 @@ function App() {
     alert('כל הנתונים נשמרו בהצלחה (במכשיר זה ובענן אם מחובר)!');
   };
 
+  // Checks if an employee has submitted/requested this day/shift, or if there is a mismatch
+  const checkWaiterAvailability = (empName, day, section, startTime) => {
+    if (!empName || typeof empName !== 'string') return null;
+    const cleanName = empName.trim();
+    if (!cleanName) return null;
+
+    // If no submissions exist at all in the system yet, don't trigger false alarms
+    if (!submissions || submissions.length === 0) return null;
+
+    const sub = submissions.find(s => 
+      (s.employeeName || '').trim().toLowerCase() === cleanName.toLowerCase()
+    );
+
+    // Case 1: Waiter has not submitted availability at all this week
+    if (!sub) {
+      return {
+        hasWarning: true,
+        reason: 'no_submission',
+        badgeText: '⚠️ לא הגיש משמרות',
+        message: `המלצר "${cleanName}" לא הגיש משמרות לשבוע זה! נא לבדוק מולו`,
+        generalNote: null
+      };
+    }
+
+    const dayData = sub.days?.[day];
+    const generalNote = sub.notes ? sub.notes.trim() : null;
+
+    // Case 2: Waiter explicitly marked off (חופש)
+    if (dayData?.off) {
+      return {
+        hasWarning: true,
+        reason: 'off',
+        badgeText: '🏖️ סימן חופש!',
+        message: `המלצר "${cleanName}" סימן חופש ביום ${day}! נא לבדוק מולו`,
+        generalNote
+      };
+    }
+
+    // Case 3: Waiter did not submit for this day at all (both morning and evening unchecked)
+    if (!dayData || (!dayData.morning && !dayData.evening)) {
+      return {
+        hasWarning: true,
+        reason: 'not_submitted_day',
+        badgeText: '⚠️ לא שיבץ ביום זה!',
+        message: `המלצר "${cleanName}" לא שיבץ ביום ${day}! נא לבדוק מולו`,
+        generalNote
+      };
+    }
+
+    // Case 4: Mismatch in shift type (e.g. submitted only evening, but scheduled in morning)
+    if (section === 'morning' && !dayData.morning && dayData.evening) {
+      return {
+        hasWarning: true,
+        reason: 'wrong_shift',
+        badgeText: '⚠️ ביקש רק ערב!',
+        message: `המלצר "${cleanName}" ביקש רק ערב ביום ${day} (שובץ בבוקר)! נא לבדוק מולו`,
+        generalNote
+      };
+    }
+
+    // Case 5: Mismatch in shift type (e.g. submitted only morning, but scheduled in evening)
+    if (section === 'evening' && !dayData.evening && dayData.morning) {
+      return {
+        hasWarning: true,
+        reason: 'wrong_shift',
+        badgeText: '⚠️ ביקש רק בוקר!',
+        message: `המלצר "${cleanName}" ביקש רק בוקר ביום ${day} (שובץ בערב)! נא לבדוק מולו`,
+        generalNote
+      };
+    }
+
+    return { hasWarning: false, generalNote };
+  };
+
+  // List of all unrequested shift assignments in the current department view
+  const unrequestedAssignments = useMemo(() => {
+    if (!CATEGORIES.includes(currentView) || !submissions || submissions.length === 0) return [];
+    const list = [];
+    DAYS.forEach(day => {
+      (shifts[currentView]?.[day] || []).forEach(slot => {
+        if (slot && slot.employee && slot.employee.trim()) {
+          const hour = slot.start ? parseInt(slot.start.split(':')[0], 10) : 12;
+          const section = (currentView === 'בייגל' && hour >= 9 && hour < 14) 
+            ? 'mid' 
+            : (hour < 16 ? 'morning' : 'evening');
+          const check = checkWaiterAvailability(slot.employee, day, section, slot.start);
+          if (check && check.hasWarning) {
+            list.push({
+              employee: slot.employee.trim(),
+              day,
+              message: check.message,
+              badgeText: check.badgeText
+            });
+          }
+        }
+      });
+    });
+    return list;
+  }, [shifts, currentView, submissions]);
+
   const updateShift = (category, day, index, field, value) => {
+    // If manager is setting employee name, verify against submissions and trigger warning toast
+    if (field === 'employee' && typeof value === 'string' && value.trim()) {
+      const cleanVal = value.trim();
+      const isKnown = allKnownEmployees.some(e => (e.name || '').trim().toLowerCase() === cleanVal.toLowerCase()) ||
+                      submissions.some(s => (s.employeeName || '').trim().toLowerCase() === cleanVal.toLowerCase());
+      
+      if (isKnown || cleanVal.length >= 3) {
+        const slot = shifts[category]?.[day]?.[index];
+        const hour = slot?.start ? parseInt(slot.start.split(':')[0], 10) : 12;
+        const section = (category === 'בייגל' && hour >= 9 && hour < 14) 
+          ? 'mid' 
+          : (hour < 16 ? 'morning' : 'evening');
+
+        const warnCheck = checkWaiterAvailability(cleanVal, day, section, slot?.start);
+        if (warnCheck && warnCheck.hasWarning) {
+          if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+          setAssignmentWarningToast({
+            id: Date.now(),
+            employee: cleanVal,
+            day,
+            message: warnCheck.message,
+            badgeText: warnCheck.badgeText,
+            generalNote: warnCheck.generalNote
+          });
+          toastTimeoutRef.current = setTimeout(() => {
+            setAssignmentWarningToast(null);
+          }, 8000);
+        } else {
+          setAssignmentWarningToast(null);
+        }
+      }
+    }
+
     setShifts(prev => {
       const newShifts = { ...prev };
       const newDayList = [...newShifts[category][day]];
@@ -1156,8 +1299,10 @@ function App() {
           }
         });
         
-        const processSlotFlags = (slot) => {
-          if (!slot.employee) return { ...slot, isDouble: false, hasOverlapConflict: false };
+        const processSlotFlags = (slot, section) => {
+          if (!slot.employee || !slot.employee.trim()) {
+            return { ...slot, isDouble: false, hasOverlapConflict: false, unrequestedWarning: null };
+          }
           const empName = slot.employee.trim();
           
           const empDayShifts = [];
@@ -1175,7 +1320,9 @@ function App() {
             return !isSameShift && isTimeOverlapping(slot.start, slot.end, other.start, other.end);
           });
 
-          return { ...slot, isDouble, hasOverlapConflict };
+          const unrequestedWarning = checkWaiterAvailability(empName, day, section, slot.start);
+
+          return { ...slot, isDouble, hasOverlapConflict, unrequestedWarning };
         };
         
         const sortFn = (a, b) => {
@@ -1186,9 +1333,9 @@ function App() {
           return a.originalIndex - b.originalIndex;
         };
         
-        processed.morning[day] = morningPool.map(processSlotFlags).sort(sortFn);
-        processed.mid[day] = midPool.map(processSlotFlags).sort(sortFn);
-        processed.evening[day] = eveningPool.map(processSlotFlags).sort(sortFn);
+        processed.morning[day] = morningPool.map(s => processSlotFlags(s, 'morning')).sort(sortFn);
+        processed.mid[day] = midPool.map(s => processSlotFlags(s, 'mid')).sort(sortFn);
+        processed.evening[day] = eveningPool.map(s => processSlotFlags(s, 'evening')).sort(sortFn);
         
         if (processed.morning[day].length > maxMorning) maxMorning = processed.morning[day].length;
         if (processed.mid[day].length > maxMid) maxMid = processed.mid[day].length;
@@ -1224,8 +1371,10 @@ function App() {
         }
       });
       
-      const processSlotFlags = (slot) => {
-        if (!slot.employee) return { ...slot, isDouble: false, hasOverlapConflict: false };
+      const processSlotFlags = (slot, section) => {
+        if (!slot.employee || !slot.employee.trim()) {
+          return { ...slot, isDouble: false, hasOverlapConflict: false, unrequestedWarning: null };
+        }
         const empName = slot.employee.trim();
         
         const empDayShifts = [];
@@ -1243,7 +1392,9 @@ function App() {
           return !isSameShift && isTimeOverlapping(slot.start, slot.end, other.start, other.end);
         });
 
-        return { ...slot, isDouble, hasOverlapConflict };
+        const unrequestedWarning = checkWaiterAvailability(empName, day, section, slot.start);
+
+        return { ...slot, isDouble, hasOverlapConflict, unrequestedWarning };
       };
       
       const sortFn = (a, b) => {
@@ -1254,8 +1405,8 @@ function App() {
         return a.originalIndex - b.originalIndex;
       };
       
-      processed.morning[day] = morningPool.map(processSlotFlags).sort(sortFn);
-      processed.evening[day] = eveningPool.map(processSlotFlags).sort(sortFn);
+      processed.morning[day] = morningPool.map(s => processSlotFlags(s, 'morning')).sort(sortFn);
+      processed.evening[day] = eveningPool.map(s => processSlotFlags(s, 'evening')).sort(sortFn);
       
       if (processed.morning[day].length > maxMorning) maxMorning = processed.morning[day].length;
       if (processed.evening[day].length > maxEvening) maxEvening = processed.evening[day].length;
@@ -1347,6 +1498,7 @@ function App() {
     const empColor = slot.employee ? getEmployeeColor(slot.employee) : null;
     const hasEmpColor = Boolean(empColor && showEmployeeColors);
     const empStat = slot.employee ? waiterShiftStats.getStats(slot.employee) : null;
+    const hasUnrequestedWarn = Boolean(slot.unrequestedWarning && slot.unrequestedWarning.hasWarning);
 
     // EXPORT MODE: Render clean static HTML cards (NO inputs!) to prevent Hebrew text reversal in html2canvas & strictly hide ratios
     if (isExporting) {
@@ -1398,7 +1550,7 @@ function App() {
     return (
       <td 
         key={day} 
-        className={`matrix-cell ${isActive ? 'active-cell' : ''} ${isConflict ? 'conflict-cell' : ''} ${isEventRole ? 'event-cell' : ''} ${hasEmpColor ? 'has-emp-color' : ''}`}
+        className={`matrix-cell ${isActive ? 'active-cell' : ''} ${isConflict ? 'conflict-cell' : ''} ${isEventRole ? 'event-cell' : ''} ${hasEmpColor ? 'has-emp-color' : ''} ${hasUnrequestedWarn ? 'unrequested-warning-cell' : ''}`}
         style={hasEmpColor ? { '--emp-accent': empColor.border } : {}}
       >
         <div className="cell-content">
@@ -1437,6 +1589,15 @@ function App() {
                 title={`הגיש ${empStat.requested} משמרות, שובץ ב-${empStat.assigned}`}
               >
                 {empStat.label}
+              </span>
+            )}
+            {hasUnrequestedWarn && !isExporting && (
+              <span 
+                className="unrequested-warning-badge"
+                title={`${slot.unrequestedWarning.message}${slot.unrequestedWarning.generalNote ? ` | הערת הגשה: ${slot.unrequestedWarning.generalNote}` : ''}`}
+              >
+                <AlertTriangle size={11} />
+                <span>{slot.unrequestedWarning.badgeText}</span>
               </span>
             )}
             {isConflict && <span className="overlap-conflict-badge">חפיפה!</span>}
@@ -1486,6 +1647,21 @@ function App() {
               onChange={(e) => updateShift(currentView, day, origIndex, 'end', e.target.value)}
             />
           </div>
+
+          {hasUnrequestedWarn && !isExporting && (
+            <div 
+              className="cell-unrequested-strip"
+              title={slot.unrequestedWarning.message}
+            >
+              <AlertTriangle size={12} className="strip-warn-icon" />
+              <span className="strip-warn-text">{slot.unrequestedWarning.message}</span>
+            </div>
+          )}
+          {hasUnrequestedWarn && slot.unrequestedWarning.generalNote && !isExporting && (
+            <div className="cell-emp-note-strip" title={slot.unrequestedWarning.generalNote}>
+              <span>📝 הערת עובד: "{slot.unrequestedWarning.generalNote}"</span>
+            </div>
+          )}
 
           {!slot.employee && availableList.length > 0 && (
             <div className="slot-avail-hint">
@@ -1548,6 +1724,47 @@ function App() {
   return (
     <div className="app-layout" dir="rtl">
       
+      {/* Floating Assignment Warning Toast */}
+      {assignmentWarningToast && (
+        <div className="assignment-warning-toast" role="alert" dir="rtl">
+          <div className="warning-toast-content">
+            <div className="warning-toast-icon-wrap">
+              <AlertTriangle size={24} className="warning-toast-icon" />
+            </div>
+            <div className="warning-toast-text">
+              <div className="warning-toast-title">
+                ⚠️ שים לב לבדיקה מול העובד: <strong>{assignmentWarningToast.employee}</strong>
+              </div>
+              <div className="warning-toast-desc">
+                {assignmentWarningToast.message}
+              </div>
+              {assignmentWarningToast.generalNote && (
+                <div className="warning-toast-note">
+                  📝 הערת המלצר מטופס ההגשה: "{assignmentWarningToast.generalNote}"
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="warning-toast-actions">
+            <button 
+              type="button" 
+              className="warning-toast-dismiss-btn"
+              onClick={() => setAssignmentWarningToast(null)}
+            >
+              הבנתי, אבדוק מולו
+            </button>
+            <button 
+              type="button" 
+              className="warning-toast-close"
+              onClick={() => setAssignmentWarningToast(null)}
+              title="סגור התראה"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Mobile/iPad Drawer Backdrop */}
       {isMobileMenuOpen && (
         <div className="sidebar-backdrop" onClick={() => setIsMobileMenuOpen(false)} />
@@ -1978,6 +2195,23 @@ function App() {
                 </button>
               </div>
             </div>
+
+            {/* Unrequested Shifts Warning Banner for Manager */}
+            {unrequestedAssignments.length > 0 && !isExporting && (
+              <div className="unrequested-summary-banner" dir="rtl">
+                <div className="unrequested-summary-content">
+                  <AlertTriangle size={20} className="unrequested-summary-icon" />
+                  <div>
+                    <span className="unrequested-summary-title">
+                      שים לב: ישנם <strong>{unrequestedAssignments.length}</strong> שיבוצים במחלקה זו שהמלצרים לא שיבצו בהם!
+                    </span>
+                    <span className="unrequested-summary-sub">
+                      משמרות אלו מודגשות בלוח במסגרת כתומה ⚠️ ודורשות בדיקה ואישור מול העובד.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="board">
               <div id="schedule-export-target" className={`table-wrapper ${isExporting ? 'is-exporting' : ''}`}>
