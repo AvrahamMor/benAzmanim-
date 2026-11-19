@@ -6,13 +6,15 @@ import {
   Download, History, ChefHat, CheckCircle, UserCheck, Flame, 
   ChevronRight, ChevronLeft, CalendarDays, Sunrise, Sunset,
   Cloud, Database, Settings, Check, X, ExternalLink, Share2,
-  Send, Sparkles, Menu, ClipboardList, UserPlus, Smartphone
+  Send, Sparkles, Menu, ClipboardList, UserPlus, Smartphone,
+  Lock, KeyRound
 } from 'lucide-react';
 import initialSchedule from './schedule.json';
 import initialStaff from './staff.json';
 import initialSubmissions from './submissions.json';
 import WaiterSubmissionView from './components/WaiterSubmissionView.jsx';
 import SubmissionsPoolView from './components/SubmissionsPoolView.jsx';
+import ManagerLockScreen from './components/ManagerLockScreen.jsx';
 import { 
   isFirebaseConfigured, 
   getFirebaseConfig, 
@@ -119,6 +121,50 @@ function App() {
   const [mobileActiveDay, setMobileActiveDay] = useState('ראשון');
   const [mobileViewMode, setMobileViewMode] = useState('table'); // 'table' or 'day'
 
+  // Manager Security & Access Control State
+  const [isManagerAuthenticated, setIsManagerAuthenticated] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('shiftApp_managerAuth') === 'true';
+  });
+  const [managerPin, setManagerPin] = useState(() => {
+    return localStorage.getItem('shiftApp_managerPin') || '1234';
+  });
+  const [showChangePinModal, setShowChangePinModal] = useState(false);
+  const [pinChangeForm, setPinChangeForm] = useState({ oldPin: '', newPin: '', confirmPin: '', error: '', success: '' });
+
+  const handleManagerLock = () => {
+    localStorage.removeItem('shiftApp_managerAuth');
+    setIsManagerAuthenticated(false);
+  };
+
+  const handleManagerUnlock = () => {
+    localStorage.setItem('shiftApp_managerAuth', 'true');
+    setIsManagerAuthenticated(true);
+  };
+
+  const handleSaveNewPin = (e) => {
+    e.preventDefault();
+    if (pinChangeForm.oldPin !== managerPin) {
+      setPinChangeForm(prev => ({ ...prev, error: 'הקוד הנוכחי אינו נכון', success: '' }));
+      return;
+    }
+    if (!pinChangeForm.newPin || pinChangeForm.newPin.length < 4) {
+      setPinChangeForm(prev => ({ ...prev, error: 'הקוד החדש חייב להכיל לפחות 4 תווים', success: '' }));
+      return;
+    }
+    if (pinChangeForm.newPin !== pinChangeForm.confirmPin) {
+      setPinChangeForm(prev => ({ ...prev, error: 'אימות הקוד אינו תואם', success: '' }));
+      return;
+    }
+    localStorage.setItem('shiftApp_managerPin', pinChangeForm.newPin);
+    setManagerPin(pinChangeForm.newPin);
+    setPinChangeForm({ oldPin: '', newPin: '', confirmPin: '', error: '', success: 'קוד הגישה למנהל עודכן בהצלחה!' });
+    setTimeout(() => {
+      setShowChangePinModal(false);
+      setPinChangeForm({ oldPin: '', newPin: '', confirmPin: '', error: '', success: '' });
+    }, 1200);
+  };
+
   // Firebase Configuration & State
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false);
   const [isCloudConnected, setIsCloudConnected] = useState(() => isFirebaseConfigured());
@@ -155,6 +201,9 @@ function App() {
     target.style.overflow = 'visible';
 
     try {
+      // Allow React 250ms to re-render clean static cards (pure HTML text instead of <input>)
+      await new Promise(resolve => setTimeout(resolve, 250));
+
       const canvas = await html2canvas(target, {
         scale: 2,
         useCORS: true,
@@ -164,6 +213,18 @@ function App() {
         backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
         windowWidth: Math.max(target.scrollWidth, 1250),
         windowHeight: target.scrollHeight,
+        onclone: (clonedDoc) => {
+          const clonedTarget = clonedDoc.getElementById(elementId);
+          if (clonedTarget) {
+            clonedTarget.setAttribute('dir', 'rtl');
+            clonedTarget.style.direction = 'rtl';
+
+            // Clean up any remaining interactive elements or badges that shouldn't appear in WhatsApp image
+            clonedTarget.querySelectorAll(
+              '.clear-cell-btn, .quick-event-btn, .btn-quick-fill-chip, .slot-avail-hint, .emp-ratio-badge, .legend-ratio-pill, .day-available-count-badge'
+            ).forEach(el => el.remove());
+          }
+        }
       });
 
       const dataUrl = canvas.toDataURL('image/png');
@@ -1289,6 +1350,53 @@ function App() {
     const hasEmpColor = Boolean(empColor && showEmployeeColors);
     const empStat = slot.employee ? waiterShiftStats.getStats(slot.employee) : null;
 
+    // EXPORT MODE: Render clean static HTML cards (NO inputs!) to prevent Hebrew text reversal in html2canvas & strictly hide ratios
+    if (isExporting) {
+      if (!slot.employee && !slot.role) {
+        return (
+          <td key={day} className="matrix-cell empty-export-cell">
+            <div className="export-empty-placeholder">-</div>
+          </td>
+        );
+      }
+
+      return (
+        <td 
+          key={day} 
+          className={`matrix-cell export-active-cell ${isEventRole ? 'event-cell' : ''} ${hasEmpColor ? 'has-emp-color' : ''}`}
+          style={hasEmpColor ? { '--emp-accent': empColor.border } : {}}
+        >
+          <div className="export-cell-card" dir="rtl">
+            {slot.employee && (
+              <div 
+                className="export-emp-badge"
+                dir="rtl"
+                style={hasEmpColor ? {
+                  backgroundColor: empColor.bg,
+                  borderColor: empColor.border,
+                  color: empColor.text,
+                  border: `2px solid ${empColor.border}`
+                } : {}}
+              >
+                {hasEmpColor && <span className="export-emp-symbol">{empColor.symbol}</span>}
+                <span className="export-emp-name-text" dir="rtl">{slot.employee}</span>
+              </div>
+            )}
+            {slot.role && (
+              <div className={`export-role-badge ${isEventRole ? 'export-event-role' : ''}`} dir="rtl">
+                {isEventRole ? `🎉 ${slot.role}` : slot.role}
+              </div>
+            )}
+            {(slot.start || slot.end) && (
+              <div className="export-time-text">
+                {slot.end || '17:00'} - {slot.start || '10:00'}
+              </div>
+            )}
+          </div>
+        </td>
+      );
+    }
+
     return (
       <td 
         key={day} 
@@ -1325,7 +1433,7 @@ function App() {
                 </span>
               )}
             </div>
-            {empStat && empStat.requested !== null && (
+            {empStat && empStat.requested !== null && !isExporting && (
               <span 
                 className={`emp-ratio-badge ${empStat.assigned >= empStat.requested ? 'ratio-ok' : 'ratio-warn'}`}
                 title={`הגיש ${empStat.requested} משמרות, שובץ ב-${empStat.assigned}`}
@@ -1416,6 +1524,24 @@ function App() {
           onSaveSubmission={handleSaveSubmission}
           existingSubmissions={submissions}
           isStandalone={true}
+        />
+      </div>
+    );
+  }
+
+  // Security Check: Manager Authentication Guard
+  // If unauthorized user visits main dashboard (e.g. waiter deletes ?view=submit from URL)
+  if (!isManagerAuthenticated) {
+    return (
+      <div className={`manager-lock-wrapper ${isDarkMode ? 'dark-mode' : ''}`} dir="rtl">
+        <ManagerLockScreen 
+          correctPin={managerPin}
+          onUnlock={handleManagerUnlock}
+          onNavigateToSubmit={() => {
+            window.history.pushState({}, '', '?view=submit');
+            setIsStandaloneSubmit(true);
+          }}
+          isDarkMode={isDarkMode}
         />
       </div>
     );
@@ -1542,6 +1668,30 @@ function App() {
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             <span>{isDarkMode ? 'מצב יום ☀️' : 'מצב לילה 🌙'}</span>
           </button>
+
+          {/* Manager Lock & PIN Controls */}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+            <button 
+              type="button"
+              className="nav-item btn-lock-manager"
+              onClick={handleManagerLock}
+              title="נעל את לוח הניהול (דרוש קוד לכניסה מחדש)"
+              style={{ flex: 1, justifyContent: 'center', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.25)', fontSize: '0.8rem', fontWeight: 'bold', padding: '8px', borderRadius: '10px', cursor: 'pointer' }}
+            >
+              <Lock size={15} />
+              <span>נעילה</span>
+            </button>
+            <button 
+              type="button"
+              className="nav-item btn-change-pin"
+              onClick={() => setShowChangePinModal(true)}
+              title="שנה קוד גישה למנהל"
+              style={{ flex: 1, justifyContent: 'center', border: '1px solid var(--card-border)', fontSize: '0.8rem', fontWeight: 'bold', padding: '8px', borderRadius: '10px', cursor: 'pointer' }}
+            >
+              <KeyRound size={15} />
+              <span>קוד גישה</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -1577,6 +1727,15 @@ function App() {
           </div>
 
           <div className="mobile-header-quick-links">
+            <button 
+              type="button"
+              className="mobile-quick-btn"
+              onClick={handleManagerLock}
+              title="נעילת לוח מנהל 🔒"
+              style={{ color: '#ef4444' }}
+            >
+              <Lock size={16} />
+            </button>
             <button 
               type="button"
               className={`mobile-quick-btn ${currentView === 'submissions' ? 'active' : ''}`}
@@ -1864,7 +2023,9 @@ function App() {
                           >
                             <span className="legend-symbol" style={{ color: col.border }}>{col.symbol}</span>
                             <span className="legend-emp-name">{emp}</span>
-                            <span className="legend-ratio-pill">{stat.label}</span>
+                            {!isExporting && stat && (
+                              <span className="legend-ratio-pill">{stat.label}</span>
+                            )}
                           </span>
                         );
                       })}
@@ -1888,7 +2049,7 @@ function App() {
                                 {formatDateShort(dayDate)}
                                 {today && <span className="today-star">⭐</span>}
                               </span>
-                              {availWaiters.length > 0 && (
+                              {!isExporting && availWaiters.length > 0 && (
                                 <span 
                                   className="day-available-count-badge" 
                                   title={availWaiters.map(w => `${w.name} (${w.shifts})${w.note ? `: ${w.note}` : ''}`).join('\n')}
@@ -1907,15 +2068,17 @@ function App() {
                     <tr className="shift-section-header">
                       <td colSpan={DAYS.length + 1} style={{ textAlign: 'center', background: 'var(--primary-light)', color: 'var(--primary-light-text)', padding: '12px', fontWeight: 'bold', fontSize: '1.15rem', position: 'relative' }}>
                         ☀️ {currentView === 'בייגל' ? 'משמרת בוקר (07:00 - 15:00)' : 'משמרת בוקר (10:00 - 17:00)'}
-                        <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
-                          <button 
-                            onClick={() => addRow(currentView, 'morning')}
-                            title={currentView === 'בייגל' ? "הוסף שורת בוקר (07:00 - 15:00)" : "הוסף שורת בוקר"}
-                            style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}
-                          >
-                            <Plus size={16} /> הוסף בוקר
-                          </button>
-                        </div>
+                        {!isExporting && (
+                          <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
+                            <button 
+                              onClick={() => addRow(currentView, 'morning')}
+                              title={currentView === 'בייגל' ? "הוסף שורת בוקר (07:00 - 15:00)" : "הוסף שורת בוקר"}
+                              style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}
+                            >
+                              <Plus size={16} /> הוסף בוקר
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                     {getProcessedShifts() && Array.from({ length: getProcessedShifts().maxMorning }).map((_, rowIndex) => {
@@ -1926,22 +2089,24 @@ function App() {
                           <td className="slot-num-cell">
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                               <span>{rowIndex + 1}</span>
-                              <div style={{ display: 'flex', gap: '2px' }}>
-                                <button 
-                                  onClick={() => addRow(currentView, 'morning')}
-                                  title="הוסף שורת בוקר"
-                                  style={{ background: 'transparent', border: 'none', color: '#10b981', cursor: 'pointer', padding: '2px' }}
-                                >
-                                  <Plus size={14} />
-                                </button>
-                                <button 
-                                  onClick={() => deleteSpecificRow(currentView, 'morning', rowIndex)}
-                                  title="מחק שורה זו"
-                                  style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
+                              {!isExporting && (
+                                <div style={{ display: 'flex', gap: '2px' }}>
+                                  <button 
+                                    onClick={() => addRow(currentView, 'morning')}
+                                    title="הוסף שורת בוקר"
+                                    style={{ background: 'transparent', border: 'none', color: '#10b981', cursor: 'pointer', padding: '2px' }}
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+                                  <button 
+                                    onClick={() => deleteSpecificRow(currentView, 'morning', rowIndex)}
+                                    title="מחק שורה זו"
+                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </td>
                           {DAYS.map(day => {
@@ -1969,15 +2134,17 @@ function App() {
                         <tr className="shift-section-header">
                           <td colSpan={DAYS.length + 1} style={{ textAlign: 'center', background: isDarkMode ? 'rgba(245, 158, 11, 0.2)' : '#fef3c7', color: isDarkMode ? '#fcd34d' : '#92400e', padding: '12px', fontWeight: 'bold', fontSize: '1.15rem', position: 'relative', borderTop: '2px solid var(--card-border)' }}>
                             🌤️ משמרת ביניים (10:00 - 19:00)
-                            <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
-                              <button 
-                                onClick={() => addRow(currentView, 'mid')}
-                                title="הוסף שורת ביניים (10:00 - 19:00)"
-                                style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}
-                              >
-                                <Plus size={16} /> הוסף ביניים
-                              </button>
-                            </div>
+                            {!isExporting && (
+                              <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
+                                <button 
+                                  onClick={() => addRow(currentView, 'mid')}
+                                  title="הוסף שורת ביניים (10:00 - 19:00)"
+                                  style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}
+                                >
+                                  <Plus size={16} /> הוסף ביניים
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                         {getProcessedShifts() && Array.from({ length: getProcessedShifts().maxMid || 1 }).map((_, rowIndex) => {
@@ -1988,22 +2155,24 @@ function App() {
                               <td className="slot-num-cell">
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                   <span>{rowIndex + 1}</span>
-                                  <div style={{ display: 'flex', gap: '2px' }}>
-                                    <button 
-                                      onClick={() => addRow(currentView, 'mid')}
-                                      title="הוסף שורת ביניים"
-                                      style={{ background: 'transparent', border: 'none', color: '#f59e0b', cursor: 'pointer', padding: '2px' }}
-                                    >
-                                      <Plus size={14} />
-                                    </button>
-                                    <button 
-                                      onClick={() => deleteSpecificRow(currentView, 'mid', rowIndex)}
-                                      title="מחק שורה זו"
-                                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
+                                  {!isExporting && (
+                                    <div style={{ display: 'flex', gap: '2px' }}>
+                                      <button 
+                                        onClick={() => addRow(currentView, 'mid')}
+                                        title="הוסף שורת ביניים"
+                                        style={{ background: 'transparent', border: 'none', color: '#f59e0b', cursor: 'pointer', padding: '2px' }}
+                                      >
+                                        <Plus size={14} />
+                                      </button>
+                                      <button 
+                                        onClick={() => deleteSpecificRow(currentView, 'mid', rowIndex)}
+                                        title="מחק שורה זו"
+                                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </td>
                               {DAYS.map(day => {
@@ -2027,22 +2196,24 @@ function App() {
                     <tr className="shift-section-header">
                       <td colSpan={DAYS.length + 1} style={{ textAlign: 'center', background: 'var(--table-header-bg)', color: 'var(--text-dark)', padding: '12px', fontWeight: 'bold', fontSize: '1.15rem', position: 'relative', borderTop: '2px solid var(--card-border)' }}>
                         🌙 {currentView === 'בייגל' ? 'משמרת ערב (15:00 - 23:00)' : 'משמרת ערב (17:00 - 01:00)'}
-                        <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
-                          <button 
-                            onClick={() => addRow(currentView, 'evening')}
-                            title={currentView === 'בייגל' ? "הוסף שורת ערב (15:00 - 23:00)" : "הוסף שורת ערב"}
-                            style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}
-                          >
-                            <Plus size={16} /> הוסף ערב
-                          </button>
-                          <button 
-                            onClick={() => addRow(currentView, 'event')}
-                            title="הוסף שורת אירוע (18:00 - 01:00)"
-                            className="btn-add-event-row"
-                          >
-                            <Sparkles size={16} /> הוסף אירוע 🎉
-                          </button>
-                        </div>
+                        {!isExporting && (
+                          <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '10px' }}>
+                            <button 
+                              onClick={() => addRow(currentView, 'evening')}
+                              title={currentView === 'בייגל' ? "הוסף שורת ערב (15:00 - 23:00)" : "הוסף שורת ערב"}
+                              style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 'bold' }}
+                            >
+                              <Plus size={16} /> הוסף ערב
+                            </button>
+                            <button 
+                              onClick={() => addRow(currentView, 'event')}
+                              title="הוסף שורת אירוע (18:00 - 01:00)"
+                              className="btn-add-event-row"
+                            >
+                              <Sparkles size={16} /> הוסף אירוע 🎉
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                     {getProcessedShifts() && Array.from({ length: getProcessedShifts().maxEvening }).map((_, rowIndex) => {
@@ -2053,22 +2224,24 @@ function App() {
                           <td className="slot-num-cell">
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                               <span>{rowIndex + 1}</span>
-                              <div style={{ display: 'flex', gap: '2px' }}>
-                                <button 
-                                  onClick={() => addRow(currentView, 'evening')}
-                                  title="הוסף שורת ערב"
-                                  style={{ background: 'transparent', border: 'none', color: '#10b981', cursor: 'pointer', padding: '2px' }}
-                                >
-                                  <Plus size={14} />
-                                </button>
-                                <button 
-                                  onClick={() => deleteSpecificRow(currentView, 'evening', rowIndex)}
-                                  title="מחק שורה זו"
-                                  style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
+                              {!isExporting && (
+                                <div style={{ display: 'flex', gap: '2px' }}>
+                                  <button 
+                                    onClick={() => addRow(currentView, 'evening')}
+                                    title="הוסף שורת ערב"
+                                    style={{ background: 'transparent', border: 'none', color: '#10b981', cursor: 'pointer', padding: '2px' }}
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+                                  <button 
+                                    onClick={() => deleteSpecificRow(currentView, 'evening', rowIndex)}
+                                    title="מחק שורה זו"
+                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </td>
                           {DAYS.map(day => {
@@ -2660,6 +2833,82 @@ function App() {
                   </div>
                 </form>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: CHANGE MANAGER PIN */}
+        {showChangePinModal && (
+          <div className="modal-backdrop" onClick={() => setShowChangePinModal(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} dir="rtl" style={{ maxWidth: '440px' }}>
+              <div className="modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <KeyRound size={22} style={{ color: 'var(--primary-color)' }} />
+                  <h2>שינוי קוד גישה למנהל</h2>
+                </div>
+                <button className="modal-close-btn" onClick={() => setShowChangePinModal(false)}>✕</button>
+              </div>
+              <form onSubmit={handleSaveNewPin}>
+                <div className="modal-body">
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px' }}>
+                    קוד זה מגן על לוח העבודה ומונע ממלצרים לגשת לנתוני השיבוץ והשכר.
+                  </p>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>קוד נוכחי:</label>
+                    <input 
+                      type="password"
+                      className="modern-input"
+                      value={pinChangeForm.oldPin}
+                      onChange={(e) => setPinChangeForm(prev => ({ ...prev, oldPin: e.target.value, error: '', success: '' }))}
+                      placeholder="הזן קוד נוכחי..."
+                      required
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>קוד חדש (לפחות 4 תווים):</label>
+                    <input 
+                      type="password"
+                      className="modern-input"
+                      value={pinChangeForm.newPin}
+                      onChange={(e) => setPinChangeForm(prev => ({ ...prev, newPin: e.target.value, error: '', success: '' }))}
+                      placeholder="הזן קוד חדש..."
+                      required
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>אימות קוד חדש:</label>
+                    <input 
+                      type="password"
+                      className="modern-input"
+                      value={pinChangeForm.confirmPin}
+                      onChange={(e) => setPinChangeForm(prev => ({ ...prev, confirmPin: e.target.value, error: '', success: '' }))}
+                      placeholder="הזן שוב את הקוד החדש..."
+                      required
+                    />
+                  </div>
+
+                  {pinChangeForm.error && (
+                    <div className="lock-error-banner" style={{ marginBottom: '10px' }}>
+                      <AlertCircle size={16} />
+                      <span>{pinChangeForm.error}</span>
+                    </div>
+                  )}
+
+                  {pinChangeForm.success && (
+                    <div style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#059669', padding: '10px 14px', borderRadius: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                      <CheckCircle size={18} />
+                      <span>{pinChangeForm.success}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button type="button" className="btn-secondary" onClick={() => setShowChangePinModal(false)}>ביטול</button>
+                  <button type="submit" className="btn-primary">שמור קוד חדש</button>
+                </div>
+              </form>
             </div>
           </div>
         )}

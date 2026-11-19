@@ -2877,6 +2877,447 @@ body.dark-mode .legend-ratio-pill {
   color: #f1f5f9;
 }
 
+/* ==========================================================================
+   EXPORT MODE CLEAN CARD STYLES (Fixes reversed Hebrew text in html2canvas & hides ratios)
+   ========================================================================== */
+.export-cell-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  padding: 4px 2px;
+  box-sizing: border-box;
+}
+
+.export-emp-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.export-emp-symbol {
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.export-emp-name-text {
+  font-size: 0.95rem;
+  font-weight: 800;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  direction: rtl;
+  unicode-bidi: isolate;
+}
+
+.export-role-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+body.dark-mode .export-role-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+
+.export-role-badge.export-event-role {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.15), rgba(168, 85, 247, 0.15));
+  color: #c026d3;
+  font-weight: 800;
+  border: 1px solid rgba(217, 70, 239, 0.35);
+}
+
+.export-time-text {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: center;
+  direction: ltr;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-export-cell {
+  background: transparent !important;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.export-empty-placeholder {
+  color: var(--text-muted);
+  opacity: 0.25;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* When table-wrapper has .is-exporting, strictly hide all management buttons and ratio pills */
+.table-wrapper.is-exporting .clear-cell-btn,
+.table-wrapper.is-exporting .quick-event-btn,
+.table-wrapper.is-exporting .slot-avail-hint,
+.table-wrapper.is-exporting .btn-quick-fill-chip,
+.table-wrapper.is-exporting .emp-ratio-badge,
+.table-wrapper.is-exporting .legend-ratio-pill,
+.table-wrapper.is-exporting .day-available-count-badge {
+  display: none !important;
+}
+
+/* ==========================================================================
+   MANAGER SECURITY LOCK SCREEN & ACCESS CONTROL
+   ========================================================================== */
+.manager-lock-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  padding: 20px;
+  font-family: inherit;
+}
+
+.lock-screen-container {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.lock-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 32px 28px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.dark-mode .lock-card,
+body.dark-mode .lock-card {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+}
+
+.lock-header {
+  margin-bottom: 24px;
+}
+
+.lock-icon-wrap {
+  width: 68px;
+  height: 68px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(245, 158, 11, 0.15));
+  border: 2px solid var(--primary-color, #d4af37);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  color: var(--primary-color, #d4af37);
+  box-shadow: 0 6px 16px rgba(212, 175, 55, 0.25);
+}
+
+.lock-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+}
+
+.dark-mode .lock-title,
+body.dark-mode .lock-title {
+  color: #f8fafc;
+}
+
+.lock-subtitle {
+  font-size: 0.95rem;
+  color: #64748b;
+  margin: 0;
+  font-weight: 600;
+}
+
+.dark-mode .lock-subtitle,
+body.dark-mode .lock-subtitle {
+  color: #94a3b8;
+}
+
+.lock-form {
+  margin-top: 20px;
+}
+
+.lock-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 8px;
+  text-align: right;
+}
+
+.dark-mode .lock-label,
+body.dark-mode .lock-label {
+  color: #cbd5e1;
+}
+
+.pin-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.pin-display-input {
+  width: 100%;
+  padding: 12px 16px 12px 46px;
+  border-radius: 14px;
+  border: 2px solid #e2e8f0;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 4px;
+  text-align: center;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.pin-display-input:focus {
+  border-color: var(--primary-color, #d4af37);
+  background: #ffffff;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.15);
+}
+
+.dark-mode .pin-display-input,
+body.dark-mode .pin-display-input {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.dark-mode .pin-display-input:focus,
+body.dark-mode .pin-display-input:focus {
+  background: #0f172a;
+  border-color: var(--primary-color, #d4af37);
+}
+
+.btn-toggle-pin-vis {
+  position: absolute;
+  left: 14px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-toggle-pin-vis:hover {
+  color: #475569;
+}
+
+.lock-error-banner {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #dc2626;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.dark-mode .lock-error-banner,
+body.dark-mode .lock-error-banner {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* Touch Keypad */
+.pin-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.keypad-digit-btn,
+.keypad-func-btn {
+  height: 52px;
+  border-radius: 12px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  border: 1.5px solid #e2e8f0;
+  background: #f8fafc;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.dark-mode .keypad-digit-btn,
+body.dark-mode .keypad-digit-btn,
+.dark-mode .keypad-func-btn,
+body.dark-mode .keypad-func-btn {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.keypad-digit-btn:hover,
+.keypad-func-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.dark-mode .keypad-digit-btn:hover,
+body.dark-mode .keypad-digit-btn:hover {
+  background: #1e293b;
+  border-color: #475569;
+}
+
+.keypad-digit-btn:active,
+.keypad-func-btn:active {
+  transform: translateY(1px);
+}
+
+.keypad-func-btn {
+  font-size: 1.1rem;
+  color: #64748b;
+}
+
+.dark-mode .keypad-func-btn,
+body.dark-mode .keypad-func-btn {
+  color: #94a3b8;
+}
+
+.btn-unlock-dashboard {
+  width: 100%;
+  height: 50px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #d4af37 0%, #b89324 100%);
+  color: #ffffff;
+  border: none;
+  font-size: 1.05rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(212, 175, 55, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-unlock-dashboard:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(212, 175, 55, 0.45);
+}
+
+.btn-unlock-dashboard:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Waiter Redirection Section */
+.lock-waiter-section {
+  margin-top: 24px;
+}
+
+.waiter-divider {
+  position: relative;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.waiter-divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.dark-mode .waiter-divider::before,
+body.dark-mode .waiter-divider::before {
+  background: #334155;
+}
+
+.waiter-divider span {
+  position: relative;
+  background: #ffffff;
+  padding: 0 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.dark-mode .waiter-divider span,
+body.dark-mode .waiter-divider span {
+  background: #1e293b;
+}
+
+.btn-waiter-submit-portal {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1.5px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+  color: #2563eb;
+  font-size: 0.95rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dark-mode .btn-waiter-submit-portal,
+body.dark-mode .btn-waiter-submit-portal {
+  color: #60a5fa;
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.btn-waiter-submit-portal:hover {
+  background: rgba(59, 130, 246, 0.16);
+  transform: translateY(-1px);
+}
+
+.lock-footer-hint {
+  margin-top: 18px;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.dark-mode .lock-footer-hint,
+body.dark-mode .lock-footer-hint {
+  color: #64748b;
+}
+
+
 
 
 

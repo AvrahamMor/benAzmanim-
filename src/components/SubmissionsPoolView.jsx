@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Users, CheckCircle2, Clock, Calendar, Search, Filter, 
-  Send, Sparkles, Sun, Moon, Trash2, Edit3, Plus, 
+import {
+  Users, CheckCircle2, Clock, Calendar, Search, Filter,
+  Send, Sparkles, Sun, Moon, Trash2, Edit3, Plus,
   Share2, ArrowRight, Check, AlertTriangle, UserPlus, ChevronDown, ChevronUp
 } from 'lucide-react';
 
@@ -44,7 +44,7 @@ export default function SubmissionsPoolView({
   // Filtered submissions
   const filteredSubmissions = useMemo(() => {
     return submissions.filter(sub => {
-      const matchesSearch = !searchQuery || 
+      const matchesSearch = !searchQuery ||
         sub.employeeName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sub.notes?.toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -64,7 +64,7 @@ export default function SubmissionsPoolView({
   const handleCopyWhatsAppReminder = () => {
     const currentUrl = window.location.origin + window.location.pathname + '?view=submit';
     const missingNamesList = missingStaff.map(s => `• ${s.name}`).join('\n');
-    
+
     const message = `היי צוות יקר! 👋
 אפשר להתחיל לשלוח משמרות לשבוע הקרוב דרך הקישור הנוח:
 ${currentUrl}
@@ -134,7 +134,7 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
 
   return (
     <div className="submissions-pool-view" dir="rtl">
-      
+
       {/* Top Header */}
       <div className="pool-header-card">
         <div className="pool-header-main">
@@ -149,9 +149,9 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
           </div>
 
           <div className="pool-header-actions">
-            <button 
-              type="button" 
-              onClick={handleCopySubmitLink} 
+            <button
+              type="button"
+              onClick={handleCopySubmitLink}
               className="btn-pool-action btn-copy-link"
               title="העתק קישור להגשת משמרות"
             >
@@ -159,9 +159,9 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
               <span>קישור הגשה למלצרים</span>
             </button>
 
-            <button 
-              type="button" 
-              onClick={handleCopyWhatsAppReminder} 
+            <button
+              type="button"
+              onClick={handleCopyWhatsAppReminder}
               className="btn-pool-action btn-whatsapp"
               title="העתק הודעת תזכורת מוכנה לווטסאפ"
             >
@@ -170,9 +170,9 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
             </button>
 
             {onBackToSchedule && (
-              <button 
-                type="button" 
-                onClick={onBackToSchedule} 
+              <button
+                type="button"
+                onClick={onBackToSchedule}
                 className="btn-pool-action btn-return-schedule"
               >
                 <span>חזור ללוח השיבוץ</span>
@@ -205,8 +205,8 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
           </div>
 
           {submissions.length > 0 && (
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={handleClearAll}
               className="btn-clear-pool"
               title="איפוס הגשות לקראת שבוע חדש"
@@ -230,8 +230,8 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
           </div>
           <div className="missing-chips-list">
             {missingStaff.map(s => (
-              <button 
-                key={s.id} 
+              <button
+                key={s.id}
                 className="missing-chip"
                 onClick={() => handleCreateManual(s.name)}
                 title={`לחץ כדי להזין משמרות עבור ${s.name}`}
@@ -248,9 +248,9 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
       <div className="pool-controls-bar">
         <div className="search-input-wrap">
           <Search size={18} />
-          <input 
-            type="text" 
-            className="pool-search-input" 
+          <input
+            type="text"
+            className="pool-search-input"
             placeholder="חפש לפי שם מלצר או הערה..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -262,17 +262,17 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
 
         <div className="day-filters-group">
           <span className="filter-label">סנן לפי יום:</span>
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={`day-filter-btn ${selectedDayFilter === '' ? 'active' : ''}`}
             onClick={() => setSelectedDayFilter('')}
           >
             הכל ({submissions.length})
           </button>
           {DAYS.map(day => (
-            <button 
+            <button
               key={day}
-              type="button" 
+              type="button"
               className={`day-filter-btn ${selectedDayFilter === day ? 'active' : ''}`}
               onClick={() => setSelectedDayFilter(selectedDayFilter === day ? '' : day)}
             >
@@ -281,9 +281,9 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
           ))}
         </div>
 
-        <button 
-          type="button" 
-          onClick={() => setShowAddModal(true)} 
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
           className="btn-add-manual"
         >
           <UserPlus size={16} />
@@ -298,9 +298,9 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
             <Users size={48} className="text-muted" />
             <h3>לא נמצאו הגשות משמרות התואמות לחיפוש</h3>
             <p>שלח את הקישור למלצרים בווטסאפ או הוסף מלצר ידנית כדי להתחיל בשיבוץ</p>
-            <button 
-              type="button" 
-              onClick={handleCopyWhatsAppReminder} 
+            <button
+              type="button"
+              onClick={handleCopyWhatsAppReminder}
               className="btn-primary"
               style={{ marginTop: '12px' }}
             >
@@ -337,8 +337,8 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
                       <span className="sub-dept-tag">{sub.preferredCategory || 'מסעדה'}</span>
                       {sub.submittedAt && (
                         <span className="sub-time-tag">
-                          {new Date(sub.submittedAt).toLocaleDateString('he-IL', { 
-                            weekday: 'short', hour: '2-digit', minute: '2-digit' 
+                          {new Date(sub.submittedAt).toLocaleDateString('he-IL', {
+                            weekday: 'short', hour: '2-digit', minute: '2-digit'
                           })}
                         </span>
                       )}
@@ -346,8 +346,8 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
                   </div>
 
                   <div className="sub-item-actions">
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       onClick={() => setEditingSubmission(JSON.parse(JSON.stringify(sub)))}
                       className="btn-sub-action btn-edit"
                       title="ערוך או הוסף ימים למלצר זה (שליטה מלאה למנהל)"
@@ -357,8 +357,8 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
                     </button>
 
                     {onAutoAssignToSchedule && (
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => onAutoAssignToSchedule(sub)}
                         className="btn-sub-action btn-assign"
                         title="שבץ מלצר זה בסידור העבודה לפי הבקשות שלו"
@@ -368,8 +368,8 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
                       </button>
                     )}
 
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       onClick={() => handleDeleteSubmission(sub.id, sub.employeeName)}
                       className="btn-sub-action btn-delete"
                       title="מחק הגשה זו"
@@ -389,8 +389,8 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
                     const isAny = hasMorning || hasEvening;
 
                     return (
-                      <div 
-                        key={day} 
+                      <div
+                        key={day}
                         className={`day-badge-col ${isAny ? 'active-day-col' : ''} ${isOff ? 'off-day-col' : ''}`}
                       >
                         <span className="day-badge-title">{day}</span>
@@ -451,26 +451,26 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
                   return (
                     <div key={day} className="edit-day-row">
                       <span className="edit-day-name">{day}</span>
-                      
+
                       <div className="edit-toggles-wrap">
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className={`edit-toggle-chip ${dayData.morning ? 'active-morning' : ''}`}
                           onClick={() => updateDay('morning', !dayData.morning)}
                         >
                           ☀️ בוקר
                         </button>
 
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className={`edit-toggle-chip ${dayData.evening ? 'active-evening' : ''}`}
                           onClick={() => updateDay('evening', !dayData.evening)}
                         >
                           🌙 ערב
                         </button>
 
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className={`edit-toggle-chip ${dayData.off ? 'active-off' : ''}`}
                           onClick={() => updateDay('off', !dayData.off)}
                         >
@@ -484,7 +484,7 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
 
               <div className="edit-general-note-row" style={{ marginTop: '16px' }}>
                 <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>הערה כללית:</label>
-                <textarea 
+                <textarea
                   className="modern-textarea"
                   rows={2}
                   value={editingSubmission.notes || ''}
@@ -494,15 +494,15 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
             </div>
 
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setEditingSubmission(null)}
                 className="btn-secondary"
               >
                 ביטול
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => handleSaveEdit(editingSubmission)}
                 className="btn-primary"
               >
@@ -525,11 +525,11 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
                 בחר עובד קיים או הקלד שם חדש:
               </label>
-              
-              <select 
-                className="modern-select" 
+
+              <select
+                className="modern-select"
                 style={{ marginBottom: '12px' }}
-                value={manualName} 
+                value={manualName}
                 onChange={(e) => setManualName(e.target.value)}
               >
                 <option value="">-- בחר עובד מרשימת הצוות --</option>
@@ -540,9 +540,9 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
 
               <div style={{ textAlign: 'center', margin: '8px 0', color: 'var(--text-muted)' }}>או</div>
 
-              <input 
-                type="text" 
-                className="modern-input" 
+              <input
+                type="text"
+                className="modern-input"
                 placeholder="הקלד שם מלצר חדש..."
                 value={manualName}
                 onChange={(e) => setManualName(e.target.value)}
@@ -550,9 +550,9 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
             </div>
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary">ביטול</button>
-              <button 
-                type="button" 
-                onClick={() => handleCreateManual(manualName)} 
+              <button
+                type="button"
+                onClick={() => handleCreateManual(manualName)}
                 className="btn-primary"
                 disabled={!manualName.trim()}
               >
