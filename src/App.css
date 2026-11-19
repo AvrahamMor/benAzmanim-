@@ -2740,6 +2740,144 @@ body.dark-mode .schedule-color-legend-bar {
   grid-column: 1 / -1;
 }
 
+/* Shift Ratio / Quota Fulfillment Tracking (X out of Y requested) */
+.stat-fulfilled {
+  background: rgba(99, 102, 241, 0.12);
+  color: #4338ca;
+}
+
+body.dark-mode .stat-fulfilled {
+  background: rgba(99, 102, 241, 0.22);
+  color: #a5b4fc;
+}
+
+.sub-title-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sub-ratio-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.sub-ratio-badge .ratio-badge-txt {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.ratio-badge-full {
+  background: rgba(16, 185, 129, 0.15);
+  color: #065f46;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+body.dark-mode .ratio-badge-full {
+  background: rgba(16, 185, 129, 0.22);
+  color: #6ee7b7;
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+.ratio-badge-partial {
+  background: rgba(245, 158, 11, 0.15);
+  color: #92400e;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+body.dark-mode .ratio-badge-partial {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fcd34d;
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.ratio-badge-zero {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+  border-color: rgba(100, 116, 139, 0.25);
+}
+
+body.dark-mode .ratio-badge-zero {
+  background: rgba(100, 116, 139, 0.22);
+  color: #cbd5e1;
+  border-color: rgba(100, 116, 139, 0.4);
+}
+
+.ratio-status-tag {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+body.dark-mode .ratio-status-tag {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+/* Ratio badge in schedule cells */
+.emp-ratio-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 6px;
+  margin-right: 4px;
+  letter-spacing: 0.2px;
+}
+
+.emp-ratio-badge.ratio-ok {
+  background: rgba(16, 185, 129, 0.18);
+  color: #047857;
+}
+
+body.dark-mode .emp-ratio-badge.ratio-ok {
+  background: rgba(16, 185, 129, 0.3);
+  color: #6ee7b7;
+}
+
+.emp-ratio-badge.ratio-warn {
+  background: rgba(245, 158, 11, 0.18);
+  color: #b45309;
+}
+
+body.dark-mode .emp-ratio-badge.ratio-warn {
+  background: rgba(245, 158, 11, 0.3);
+  color: #fcd34d;
+}
+
+/* Ratio indicator in quick-fill chips under slot */
+.chip-stat-num {
+  font-size: 0.72rem;
+  opacity: 0.85;
+  font-weight: 800;
+  margin-right: 2px;
+}
+
+/* Ratio pill in employee color legend bar */
+.legend-ratio-pill {
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--text-dark);
+}
+
+body.dark-mode .legend-ratio-pill {
+  background: rgba(255, 255, 255, 0.15);
+  color: #f1f5f9;
+}
+
+
 
 
 

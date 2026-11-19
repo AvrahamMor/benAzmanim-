@@ -399,6 +399,54 @@ function App() {
     };
   }, [isCloudConnected]);
 
+  // Shift counts for each waiter: how many requested vs how many assigned in this week's schedule
+  const waiterShiftStats = useMemo(() => {
+    // 1. Calculate requested count from submissions
+    const requested = {};
+    submissions.forEach(sub => {
+      const name = (sub.employeeName || '').trim();
+      if (!name) return;
+      let count = 0;
+      DAYS.forEach(day => {
+        const d = sub.days?.[day];
+        if (d && !d.off) {
+          if (d.morning) count++;
+          if (d.evening) count++;
+        }
+      });
+      requested[name.toLowerCase()] = count;
+    });
+
+    // 2. Calculate assigned count across all categories/shifts in the schedule
+    const assigned = {};
+    CATEGORIES.forEach(cat => {
+      DAYS.forEach(day => {
+        (shifts[cat]?.[day] || []).forEach(slot => {
+          if (slot.employee && slot.employee.trim()) {
+            const name = slot.employee.trim().toLowerCase();
+            assigned[name] = (assigned[name] || 0) + 1;
+          }
+        });
+      });
+    });
+
+    // Helper function for any employee name
+    const getStats = (empName) => {
+      if (!empName) return { assigned: 0, requested: null, label: '0', fullLabel: '0' };
+      const key = empName.trim().toLowerCase();
+      const a = assigned[key] || 0;
+      const r = requested[key] !== undefined ? requested[key] : null;
+      return {
+        assigned: a,
+        requested: r,
+        label: r !== null ? `${a}/${r}` : `${a}`,
+        fullLabel: r !== null ? `${a} מתוך ${r}` : `${a} משמרות`
+      };
+    };
+
+    return { assigned, requested, getStats };
+  }, [submissions, shifts]);
+
   // Available waiters grouped by day and shift type (derived from submissions)
   const availableWaitersByDay = useMemo(() => {
     const map = {};
@@ -415,13 +463,15 @@ function App() {
         const d = sub.days?.[day];
         if (d && !d.off) {
           const empName = sub.employeeName;
-          if (d.morning) map[day].morning.push({ name: empName, note: d.note });
-          if (d.evening) map[day].evening.push({ name: empName, note: d.note });
+          const stat = waiterShiftStats.getStats(empName);
+          if (d.morning) map[day].morning.push({ name: empName, note: d.note, stat });
+          if (d.evening) map[day].evening.push({ name: empName, note: d.note, stat });
           if (d.morning || d.evening) {
             map[day].all.push({ 
               name: empName, 
               shifts: [d.morning && 'בוקר', d.evening && 'ערב'].filter(Boolean).join('/'),
-              note: d.note 
+              note: d.note,
+              stat
             });
           }
         }
@@ -429,7 +479,7 @@ function App() {
     });
 
     return map;
-  }, [submissions]);
+  }, [submissions, waiterShiftStats]);
 
   // Combined list of all known staff including newly submitted waiters
   const allKnownEmployees = useMemo(() => {
@@ -1237,6 +1287,7 @@ function App() {
 
     const empColor = slot.employee ? getEmployeeColor(slot.employee) : null;
     const hasEmpColor = Boolean(empColor && showEmployeeColors);
+    const empStat = slot.employee ? waiterShiftStats.getStats(slot.employee) : null;
 
     return (
       <td 
@@ -1274,6 +1325,14 @@ function App() {
                 </span>
               )}
             </div>
+            {empStat && empStat.requested !== null && (
+              <span 
+                className={`emp-ratio-badge ${empStat.assigned >= empStat.requested ? 'ratio-ok' : 'ratio-warn'}`}
+                title={`הגיש ${empStat.requested} משמרות, שובץ ב-${empStat.assigned}`}
+              >
+                {empStat.label}
+              </span>
+            )}
             {isConflict && <span className="overlap-conflict-badge">חפיפה!</span>}
             {slot.isDouble && !isConflict && <span className="double-shift-badge">כפולה</span>}
             {isEventRole && <span className="event-tag-badge">🎉 {slot.role}</span>}
@@ -1325,17 +1384,20 @@ function App() {
           {!slot.employee && availableList.length > 0 && (
             <div className="slot-avail-hint">
               <span className="avail-hint-label">זמינים:</span>
-              {availableList.slice(0, 2).map((w, wi) => (
-                <button 
-                  key={wi}
-                  type="button" 
-                  className="btn-quick-fill-chip"
-                  onClick={() => updateShift(currentView, day, origIndex, 'employee', w.name)}
-                  title={`שבץ את ${w.name}${w.note ? ` (${w.note})` : ''}`}
-                >
-                  + {w.name}
-                </button>
-              ))}
+              {availableList.slice(0, 2).map((w, wi) => {
+                const stat = w.stat || waiterShiftStats.getStats(w.name);
+                return (
+                  <button 
+                    key={wi}
+                    type="button" 
+                    className="btn-quick-fill-chip"
+                    onClick={() => updateShift(currentView, day, origIndex, 'employee', w.name)}
+                    title={`שבץ את ${w.name} (שובץ ${stat.fullLabel})${w.note ? ` (${w.note})` : ''}`}
+                  >
+                    + {w.name} <span className="chip-stat-num">({stat.label})</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1788,6 +1850,7 @@ function App() {
                       {activeEmployeesInCurrentSchedule.map(emp => {
                         const col = getEmployeeColor(emp);
                         if (!col) return null;
+                        const stat = waiterShiftStats.getStats(emp);
                         return (
                           <span 
                             key={emp} 
@@ -1797,9 +1860,11 @@ function App() {
                               borderColor: col.border, 
                               color: col.text 
                             }}
+                            title={`שובץ ${stat.fullLabel}`}
                           >
                             <span className="legend-symbol" style={{ color: col.border }}>{col.symbol}</span>
                             <span className="legend-emp-name">{emp}</span>
+                            <span className="legend-ratio-pill">{stat.label}</span>
                           </span>
                         );
                       })}
@@ -2060,6 +2125,7 @@ function App() {
             onAutoAssignToSchedule={handleAutoAssignToSchedule}
             onBackToSchedule={() => setCurrentView('מסעדה')}
             currentCategory={CATEGORIES.includes(currentView) ? currentView : 'מסעדה'}
+            waiterShiftStats={waiterShiftStats}
           />
         )}
 

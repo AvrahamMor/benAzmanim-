@@ -12,7 +12,8 @@ export default function SubmissionsPoolView({
   onUpdateSubmissions,
   onAutoAssignToSchedule,
   onBackToSchedule,
-  currentCategory = 'מסעדה'
+  currentCategory = 'מסעדה',
+  waiterShiftStats
 }) {
   const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'מוצ"ש'];
 
@@ -30,6 +31,15 @@ export default function SubmissionsPoolView({
   const missingStaff = useMemo(() => {
     return staffList.filter(s => !submittedNames.has((s.name || '').trim().toLowerCase()));
   }, [staffList, submittedNames]);
+
+  // How many waiters have fulfilled their requested shift quota
+  const fullAssignedCount = useMemo(() => {
+    if (!waiterShiftStats?.getStats) return 0;
+    return submissions.filter(sub => {
+      const s = waiterShiftStats.getStats(sub.employeeName);
+      return s.requested > 0 && s.assigned >= s.requested;
+    }).length;
+  }, [submissions, waiterShiftStats]);
 
   // Filtered submissions
   const filteredSubmissions = useMemo(() => {
@@ -179,6 +189,11 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
             <span>הגישו משמרות: <strong>{submissions.length}</strong> עובדים</span>
           </div>
 
+          <div className="stat-pill stat-fulfilled">
+            <Sparkles size={18} />
+            <span>שובצו מלא: <strong>{fullAssignedCount}</strong> מתוך <strong>{submissions.length}</strong></span>
+          </div>
+
           <div className="stat-pill stat-missing">
             <Clock size={18} />
             <span>טרם הגישו: <strong>{missingStaff.length}</strong> עובדים</span>
@@ -294,11 +309,30 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
           </div>
         ) : (
           filteredSubmissions.map(sub => {
+            const stat = waiterShiftStats?.getStats ? waiterShiftStats.getStats(sub.employeeName) : null;
+            const isFull = stat && stat.requested > 0 && stat.assigned >= stat.requested;
+            const isPartial = stat && stat.assigned > 0 && stat.assigned < stat.requested;
+            const isZero = stat && stat.assigned === 0;
+            const isOver = stat && stat.assigned > stat.requested;
+
             return (
               <div key={sub.id} className="submission-card-item">
                 <div className="sub-item-header">
                   <div>
-                    <h3 className="sub-employee-name">{sub.employeeName}</h3>
+                    <div className="sub-title-with-badge">
+                      <h3 className="sub-employee-name">{sub.employeeName}</h3>
+                      {stat && stat.requested !== null && (
+                        <div className={`sub-ratio-badge ${isFull ? 'ratio-badge-full' : (isPartial ? 'ratio-badge-partial' : 'ratio-badge-zero')}`}>
+                          <span className="ratio-badge-txt">
+                            שיבוץ: <strong>{stat.assigned}</strong> מתוך <strong>{stat.requested}</strong>
+                          </span>
+                          {isFull && !isOver && <span className="ratio-status-tag tag-full">✅ הושלם</span>}
+                          {isPartial && <span className="ratio-status-tag tag-partial">⏳ חסר {stat.requested - stat.assigned}</span>}
+                          {isZero && <span className="ratio-status-tag tag-zero">⚪ טרם שובץ</span>}
+                          {isOver && <span className="ratio-status-tag tag-over">⭐ +{stat.assigned - stat.requested}</span>}
+                        </div>
+                      )}
+                    </div>
                     <div className="sub-meta-info">
                       <span className="sub-dept-tag">{sub.preferredCategory || 'מסעדה'}</span>
                       {sub.submittedAt && (
