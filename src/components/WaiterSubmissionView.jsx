@@ -20,6 +20,7 @@ export default function WaiterSubmissionView({
   const [preferredCategory, setPreferredCategory] = useState('מסעדה');
   const [generalNotes, setGeneralNotes] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionSuccessInfo, setSubmissionSuccessInfo] = useState(null);
   const [bulkPrompt, setBulkPrompt] = useState(null); // { shiftType: 'evening' | 'morning' }
 
@@ -130,8 +131,10 @@ export default function WaiterSubmissionView({
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     const finalName = isCustomName ? customNameInput.trim() : selectedName;
     
     if (!finalName) {
@@ -159,9 +162,19 @@ export default function WaiterSubmissionView({
       days: daysAvailability
     };
 
-    onSaveSubmission(submissionData);
-    setSubmissionSuccessInfo(submissionData);
-    setIsSubmitted(true);
+    setIsSubmitting(true);
+    try {
+      if (onSaveSubmission) {
+        await onSaveSubmission(submissionData);
+      }
+      setSubmissionSuccessInfo(submissionData);
+      setIsSubmitted(true);
+    } catch (err) {
+      console.error('Error submitting shifts:', err);
+      alert('אירעה שגיאה בשליחת המשמרות. אנא נסה/י שוב.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleResetForNew = () => {
@@ -451,9 +464,11 @@ export default function WaiterSubmissionView({
             <button 
               type="submit" 
               className="btn-submit-shifts"
+              disabled={isSubmitting}
+              style={{ opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'wait' : 'pointer' }}
             >
               <Send size={20} />
-              <span>שליחת משמרות לשבוע זה 🚀</span>
+              <span>{isSubmitting ? 'שולח משמרות לענן...' : 'שליחת משמרות לשבוע זה 🚀'}</span>
             </button>
           </div>
 
