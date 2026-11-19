@@ -26,7 +26,9 @@ import {
   subscribeToArchives, 
   saveArchiveToCloud,
   subscribeToSubmissions,
-  saveSubmissionsToCloud
+  saveSubmissionsToCloud,
+  saveSingleSubmissionToCloud,
+  deleteSubmissionFromCloud
 } from './firebase.js';
 import './App.css';
 
@@ -625,6 +627,10 @@ function App() {
 
   // Handler: Waiter submits availability
   const handleSaveSubmission = (newSub) => {
+    // 1. Immediately persist single submission to isolated Firestore doc (atomic per-waiter write)
+    saveSingleSubmissionToCloud(newSub);
+
+    // 2. Update local state
     setSubmissions(prev => {
       const existingIdx = prev.findIndex(s => 
         (s.employeeName || '').trim().toLowerCase() === (newSub.employeeName || '').trim().toLowerCase()
@@ -638,18 +644,10 @@ function App() {
       }
 
       localStorage.setItem('shiftApp_submissions', JSON.stringify(updated));
-      saveSubmissionsToCloud(updated);
-
-      fetch('/api/save-submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated)
-      }).catch(() => {});
-
       return updated;
     });
 
-    // If new waiter name is not in staffList, also add to staffList
+    // 3. If new waiter name is not in staffList, also add to staffList
     if (newSub.employeeName) {
       setStaffList(prevStaff => {
         const cleanName = newSub.employeeName.trim();
