@@ -366,11 +366,6 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
                           {isOff && <span className="shift-chip off-chip" title="חופש">🏖️</span>}
                           {!isAny && !isOff && <span className="shift-chip empty-chip">-</span>}
                         </div>
-                        {dayData?.note && (
-                          <span className="day-custom-note" title={dayData.note}>
-                            {dayData.note}
-                          </span>
-                        )}
                       </div>
                     );
                   })}
@@ -448,14 +443,6 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
                           🏖️ חופש
                         </button>
                       </div>
-
-                      <input 
-                        type="text" 
-                        className="edit-day-note-input"
-                        placeholder="הערה ליום זה..."
-                        value={dayData.note || ''}
-                        onChange={(e) => updateDay('note', e.target.value)}
-                      />
                     </div>
                   );
                 })}

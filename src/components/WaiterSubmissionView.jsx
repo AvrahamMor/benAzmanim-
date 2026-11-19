@@ -113,10 +113,10 @@ export default function WaiterSubmissionView({
       return;
     }
 
-    // Check if at least one day has availability or note
+    // Check if at least one day has availability or there are general notes
     const hasAnySelection = Object.values(daysAvailability).some(
-      d => d.morning || d.evening || d.off || (d.note && d.note.trim())
-    );
+      d => d.morning || d.evening || d.off
+    ) || Boolean(generalNotes.trim());
 
     if (!hasAnySelection) {
       if (!window.confirm('לא סומנו משמרות. האם את/ה בטוח/ה שברצונך לשלוח טופס זה?')) {
@@ -213,7 +213,6 @@ export default function WaiterSubmissionView({
                     <span className="summary-day-name">{day} ({getDayShortDate(idx)}):</span>
                     <span className="summary-day-shifts">
                       {activeBadges.length > 0 ? activeBadges.join(', ') : 'לא סומן'}
-                      {info?.note && <span className="summary-note"> ({info.note})</span>}
                     </span>
                   </div>
                 );
@@ -413,17 +412,6 @@ export default function WaiterSubmissionView({
                       <span>יום חופש מסומן - לא תשובץ ביום זה</span>
                     </div>
                   )}
-
-                  {/* Day Specific Note */}
-                  <div className="day-note-wrapper">
-                    <input 
-                      type="text"
-                      className="day-note-input"
-                      placeholder={`הערה ליום ${day} (לדוגמה: "רק מ-18:00", "מעדיף אירוע")...`}
-                      value={dayData.note || ''}
-                      onChange={(e) => setDayNote(day, e.target.value)}
-                    />
-                  </div>
                 </div>
               );
             })}
