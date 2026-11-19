@@ -21,6 +21,7 @@ export default function WaiterSubmissionView({
   const [generalNotes, setGeneralNotes] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submissionSuccessInfo, setSubmissionSuccessInfo] = useState(null);
+  const [bulkPrompt, setBulkPrompt] = useState(null); // { shiftType: 'evening' | 'morning' }
 
   // Initialize day availability state (Waiters submit Morning, Evening or Off)
   const initialDaysState = () => {
@@ -29,8 +30,7 @@ export default function WaiterSubmissionView({
       state[day] = {
         morning: false,
         evening: false,
-        off: false,
-        note: ''
+        off: false
       };
     });
     return state;
@@ -52,6 +52,12 @@ export default function WaiterSubmissionView({
   }, [selectedName, customNameInput, isCustomName, existingSubmissions]);
 
   const toggleShift = (day, shiftType) => {
+    // In Kosher restaurants / Judaism:
+    // Motzash has no morning shift
+    if (day === 'מוצ"ש' && shiftType === 'morning') return;
+    // Friday has no evening shift
+    if (day === 'שישי' && shiftType === 'evening') return;
+
     setDaysAvailability(prev => {
       const currentDay = { ...prev[day] };
 
@@ -62,8 +68,7 @@ export default function WaiterSubmissionView({
           [day]: {
             morning: false,
             evening: false,
-            off: willBeOff,
-            note: willBeOff ? 'חופש' : ''
+            off: willBeOff
           }
         };
       } else {
@@ -81,24 +86,45 @@ export default function WaiterSubmissionView({
     });
   };
 
-  const setDayNote = (day, note) => {
-    setDaysAvailability(prev => ({
-      ...prev,
-      [day]: { ...prev[day], note }
-    }));
-  };
-
-  const setAllDays = (shiftType) => {
+  const handleBulkConfirm = (shiftType, includeWeekend) => {
     setDaysAvailability(prev => {
       const updated = { ...prev };
       DAYS.forEach(day => {
-        if (shiftType === 'evening') {
-          updated[day] = { ...updated[day], evening: true, off: false };
-        } else if (shiftType === 'morning') {
-          updated[day] = { ...updated[day], morning: true, off: false };
-        } else if (shiftType === 'clear') {
-          updated[day] = { morning: false, evening: false, off: false, note: '' };
+        const isWeekend = day === 'שישי' || day === 'מוצ"ש';
+
+        if (isWeekend) {
+          if (!includeWeekend) {
+            // Cancel weekend: leave unselected
+            updated[day] = { morning: false, evening: false, off: false };
+          } else {
+            // Keep weekend: Friday has morning only, Motzash has evening only
+            if (shiftType === 'morning') {
+              if (day === 'שישי') updated['שישי'] = { morning: true, evening: false, off: false };
+              if (day === 'מוצ"ש') updated['מוצ"ש'] = { morning: false, evening: false, off: false };
+            } else if (shiftType === 'evening') {
+              if (day === 'שישי') updated['שישי'] = { morning: false, evening: false, off: false };
+              if (day === 'מוצ"ש') updated['מוצ"ש'] = { morning: false, evening: true, off: false };
+            }
+          }
+        } else {
+          // Sunday through Thursday
+          if (shiftType === 'morning') {
+            updated[day] = { ...updated[day], morning: true, off: false };
+          } else if (shiftType === 'evening') {
+            updated[day] = { ...updated[day], evening: true, off: false };
+          }
         }
+      });
+      return updated;
+    });
+    setBulkPrompt(null);
+  };
+
+  const handleClearAll = () => {
+    setDaysAvailability(prev => {
+      const updated = {};
+      DAYS.forEach(day => {
+        updated[day] = { morning: false, evening: false, off: false };
       });
       return updated;
     });
@@ -298,22 +324,6 @@ export default function WaiterSubmissionView({
                 </button>
               </div>
             )}
-
-            <div className="department-select-row">
-              <span className="sub-label">מחלקה מועדפת:</span>
-              <div className="radio-pill-group">
-                {['מסעדה', 'בייגל', 'יריד אוכל מוכן', 'מטבח', 'מארחות'].map(cat => (
-                  <button
-                    key={cat}
-                    type="button"
-                    className={`radio-pill ${preferredCategory === cat ? 'active' : ''}`}
-                    onClick={() => setPreferredCategory(cat)}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* Quick Bulk Selection Tools */}
@@ -322,7 +332,7 @@ export default function WaiterSubmissionView({
             <div className="tools-buttons">
               <button 
                 type="button" 
-                onClick={() => setAllDays('evening')} 
+                onClick={() => setBulkPrompt({ shiftType: 'evening' })} 
                 className="tool-btn evening-tool"
               >
                 <Moon size={14} />
@@ -330,7 +340,7 @@ export default function WaiterSubmissionView({
               </button>
               <button 
                 type="button" 
-                onClick={() => setAllDays('morning')} 
+                onClick={() => setBulkPrompt({ shiftType: 'morning' })} 
                 className="tool-btn morning-tool"
               >
                 <Sun size={14} />
@@ -338,7 +348,7 @@ export default function WaiterSubmissionView({
               </button>
               <button 
                 type="button" 
-                onClick={() => setAllDays('clear')} 
+                onClick={handleClearAll} 
                 className="tool-btn clear-tool"
               >
                 <RotateCcw size={14} />
@@ -375,37 +385,41 @@ export default function WaiterSubmissionView({
 
                   {!dayData.off ? (
                     <div className="shift-toggle-group">
-                      {/* Morning Shift Toggle */}
-                      <button 
-                        type="button"
-                        onClick={() => toggleShift(day, 'morning')}
-                        className={`shift-toggle-btn morning-btn ${dayData.morning ? 'active' : ''}`}
-                      >
-                        <Sun size={18} />
-                        <div className="shift-btn-text">
-                          <span className="shift-btn-title">בוקר</span>
-                          <span className="shift-btn-hours">
-                            {preferredCategory === 'בייגל' ? '07:00-15:00' : '10:00-17:00'}
-                          </span>
-                        </div>
-                        {dayData.morning && <Check size={16} className="check-icon" />}
-                      </button>
+                      {/* Morning Shift Toggle (Not available on Motzash) */}
+                      {day !== 'מוצ"ש' && (
+                        <button 
+                          type="button"
+                          onClick={() => toggleShift(day, 'morning')}
+                          className={`shift-toggle-btn morning-btn ${dayData.morning ? 'active' : ''}`}
+                        >
+                          <Sun size={18} />
+                          <div className="shift-btn-text">
+                            <span className="shift-btn-title">{day === 'שישי' ? 'משמרת שישי' : 'בוקר'}</span>
+                            <span className="shift-btn-hours">
+                              {day === 'שישי' ? '09:00-15:00' : '10:00-17:00'}
+                            </span>
+                          </div>
+                          {dayData.morning && <Check size={16} className="check-icon" />}
+                        </button>
+                      )}
 
-                      {/* Evening Shift Toggle */}
-                      <button 
-                        type="button"
-                        onClick={() => toggleShift(day, 'evening')}
-                        className={`shift-toggle-btn evening-btn ${dayData.evening ? 'active' : ''}`}
-                      >
-                        <Moon size={18} />
-                        <div className="shift-btn-text">
-                          <span className="shift-btn-title">ערב</span>
-                          <span className="shift-btn-hours">
-                            {preferredCategory === 'בייגל' ? '15:00-23:00' : '17:00-01:00'}
-                          </span>
-                        </div>
-                        {dayData.evening && <Check size={16} className="check-icon" />}
-                      </button>
+                      {/* Evening Shift Toggle (Not available on Friday) */}
+                      {day !== 'שישי' && (
+                        <button 
+                          type="button"
+                          onClick={() => toggleShift(day, 'evening')}
+                          className={`shift-toggle-btn evening-btn ${dayData.evening ? 'active' : ''}`}
+                        >
+                          <Moon size={18} />
+                          <div className="shift-btn-text">
+                            <span className="shift-btn-title">{day === 'מוצ"ש' ? 'משמרת מוצ״ש' : 'ערב'}</span>
+                            <span className="shift-btn-hours">
+                              {day === 'מוצ"ש' ? 'עד סגירה' : '17:00-01:00'}
+                            </span>
+                          </div>
+                          {dayData.evening && <Check size={16} className="check-icon" />}
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="day-off-banner">
@@ -444,6 +458,56 @@ export default function WaiterSubmissionView({
           </div>
 
         </form>
+      )}
+
+      {/* Smart Weekend Confirmation Modal for Quick Fill Tools */}
+      {bulkPrompt && (
+        <div className="modal-backdrop" onClick={() => setBulkPrompt(null)}>
+          <div className="modal-content bulk-prompt-card" onClick={e => e.stopPropagation()} dir="rtl">
+            <div className="bulk-prompt-icon-wrap">
+              <AlertCircle size={36} />
+            </div>
+            
+            <div className="bulk-prompt-header">
+              <h3>שים לב: שיבוץ מהיר</h3>
+              <p className="bulk-prompt-desc">
+                האם את/ה בטוח/ה שברצונך לסמן גם את <strong>שישי</strong> ו<strong>מוצ״ש</strong>?
+              </p>
+            </div>
+
+            <div className="bulk-prompt-note">
+              <span>(שישי ומוצ״ש מיועדים בעיקר לעובדי החלבי / בייגל)</span>
+            </div>
+
+            <div className="bulk-prompt-buttons">
+              <button 
+                type="button" 
+                className="btn-prompt-action btn-prompt-cancel-weekend"
+                onClick={() => handleBulkConfirm(bulkPrompt.shiftType, false)}
+              >
+                <span className="btn-main-txt">בטל את שישי ומוצ״ש</span>
+                <span className="btn-sub-txt">(סמן ראשון עד חמישי בלבד 🗓️)</span>
+              </button>
+
+              <button 
+                type="button" 
+                className="btn-prompt-action btn-prompt-keep-weekend"
+                onClick={() => handleBulkConfirm(bulkPrompt.shiftType, true)}
+              >
+                <span className="btn-main-txt">השאר את שישי ומוצ״ש</span>
+                <span className="btn-sub-txt">(מיועד לעובדי החלבי ✅)</span>
+              </button>
+
+              <button 
+                type="button" 
+                className="btn-prompt-dismiss"
+                onClick={() => setBulkPrompt(null)}
+              >
+                ביטול
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

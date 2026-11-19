@@ -2617,5 +2617,129 @@ body.dark-mode .schedule-color-legend-bar {
   flex-shrink: 0;
 }
 
+/* ==========================================================================
+   BULK WEEKEND CONFIRMATION PROMPT MODAL
+   ========================================================================== */
+.bulk-prompt-card {
+  max-width: 440px !important;
+  text-align: center;
+  padding: 26px 20px !important;
+  border-radius: 20px !important;
+  border: 1px solid var(--card-border);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25) !important;
+  animation: fadeIn 0.2s ease;
+}
+
+.bulk-prompt-icon-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px auto;
+  color: #f59e0b;
+}
+
+.bulk-prompt-header h3 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  color: var(--text-dark);
+}
+
+.bulk-prompt-desc {
+  font-size: 1.05rem;
+  color: var(--text-dark);
+  margin: 0 0 10px 0;
+  line-height: 1.4;
+}
+
+.bulk-prompt-note {
+  background: var(--input-bg);
+  border: 1px dashed var(--card-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.92rem;
+  color: var(--primary-color, #d4af37);
+  font-weight: 700;
+  margin: 12px 0 20px 0;
+}
+
+.bulk-prompt-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.btn-prompt-action {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: none;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.btn-prompt-cancel-weekend {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.btn-prompt-cancel-weekend:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+}
+
+.btn-prompt-keep-weekend {
+  background: var(--card-bg);
+  color: var(--text-dark);
+  border: 1.5px solid var(--primary-color) !important;
+}
+
+.btn-prompt-keep-weekend:hover {
+  background: rgba(212, 175, 55, 0.12);
+}
+
+.btn-prompt-action .btn-main-txt {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.btn-prompt-action .btn-sub-txt {
+  font-size: 0.82rem;
+  opacity: 0.85;
+  font-weight: 600;
+}
+
+.btn-prompt-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  padding: 8px;
+  cursor: pointer;
+  margin-top: 2px;
+}
+
+.btn-prompt-dismiss:hover {
+  color: var(--text-dark);
+  text-decoration: underline;
+}
+
+/* Single shift button in toggle group (e.g. on Friday or Motzash) stretches full width */
+.shift-toggle-group button:only-child {
+  grid-column: 1 / -1;
+}
+
+
 
 
