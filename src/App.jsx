@@ -451,23 +451,12 @@ function App() {
     return saved !== null ? JSON.parse(saved) : true;
   });
 
-  const WAITER_PALETTE = useMemo(() => [
-    { id: 'blue', name: 'כחול', bg: '#eff6ff', border: '#2563eb', text: '#1e40af', darkBg: 'rgba(37, 99, 235, 0.22)', darkText: '#93c5fd' },
-    { id: 'emerald', name: 'ירוק אמרלד', bg: '#ecfdf5', border: '#059669', text: '#065f46', darkBg: 'rgba(5, 150, 105, 0.22)', darkText: '#6ee7b7' },
-    { id: 'amber', name: 'כתום-זהב', bg: '#fffbeb', border: '#d97706', text: '#92400e', darkBg: 'rgba(217, 119, 6, 0.22)', darkText: '#fcd34d' },
-    { id: 'purple', name: 'סגול', bg: '#faf5ff', border: '#9333ea', text: '#6b21a8', darkBg: 'rgba(147, 51, 234, 0.22)', darkText: '#d8b4fe' },
-    { id: 'rose', name: 'ורד-אדום', bg: '#fff1f2', border: '#e11d48', text: '#9f1239', darkBg: 'rgba(225, 29, 72, 0.22)', darkText: '#fda4af' },
-    { id: 'cyan', name: 'טורקיז', bg: '#ecfeff', border: '#0891b2', text: '#155e75', darkBg: 'rgba(8, 145, 178, 0.22)', darkText: '#67e8f9' },
-    { id: 'orange', name: 'כתום', bg: '#fff7ed', border: '#ea580c', text: '#9a3412', darkBg: 'rgba(234, 88, 12, 0.22)', darkText: '#fdba74' },
-    { id: 'indigo', name: 'אינדיגו', bg: '#eef2ff', border: '#4f46e5', text: '#3730a3', darkBg: 'rgba(79, 70, 229, 0.22)', darkText: '#a5b4fc' },
-    { id: 'teal', name: 'ירוק ים', bg: '#f0fdfa', border: '#0d9488', text: '#115e59', darkBg: 'rgba(13, 148, 136, 0.22)', darkText: '#5eead4' },
-    { id: 'pink', name: 'ורוד', bg: '#fdf2f8', border: '#db2777', text: '#9d174d', darkBg: 'rgba(219, 39, 119, 0.22)', darkText: '#f472b6' },
-    { id: 'lime', name: 'ליים', bg: '#f7fee7', border: '#65a30d', text: '#3f6212', darkBg: 'rgba(101, 163, 13, 0.22)', darkText: '#bef264' },
-    { id: 'violet', name: 'ויולט', bg: '#f5f3ff', border: '#7c3aed', text: '#5b21b6', darkBg: 'rgba(124, 58, 237, 0.22)', darkText: '#c4b5fd' },
-    { id: 'sky', name: 'תכלת', bg: '#f0f9ff', border: '#0284c7', text: '#075985', darkBg: 'rgba(2, 132, 199, 0.22)', darkText: '#7dd3fc' },
-    { id: 'yellow', name: 'חרדל', bg: '#fefce8', border: '#ca8a04', text: '#854d0e', darkBg: 'rgba(202, 138, 4, 0.22)', darkText: '#fde047' },
-    { id: 'magenta', name: 'מגנטה', bg: '#fdf4ff', border: '#c026d3', text: '#86198f', darkBg: 'rgba(192, 38, 211, 0.22)', darkText: '#f0abfc' },
-    { id: 'slate', name: 'כסוף פלדה', bg: '#f1f5f9', border: '#475569', text: '#334155', darkBg: 'rgba(71, 85, 105, 0.22)', darkText: '#cbd5e1' }
+  // Mathematical HSL Spectrum Distribution (Idea 2) + Unique Geometric/Identifiable Symbols (Idea 3)
+  // Ensures unlimited employees have 100% unique color shades and unique identifiable symbols!
+  const EMPLOYEE_SYMBOLS = useMemo(() => [
+    '●', '◆', '▲', '★', '■', '✦', '◈', '⬡', 
+    '✿', '❖', '💎', '⚡', '⭐', '☀️', '🌙', '🔥',
+    '⬤', '⯁', '⯀', '✪', '❂', '✱', '✧', '᯽'
   ], []);
 
   const getEmployeeColor = (name) => {
@@ -487,11 +476,26 @@ function App() {
       index = Math.abs(hash);
     }
 
-    const pal = WAITER_PALETTE[index % WAITER_PALETTE.length];
+    // Golden Ratio hue distribution (137.508°) spreads hues evenly around the 360° color wheel
+    // so adjacent workers get completely distinct hues without collisions
+    const hue = Math.round((index * 137.508) % 360);
+    const symbol = EMPLOYEE_SYMBOLS[index % EMPLOYEE_SYMBOLS.length];
+
+    const lightBg = `hsl(${hue}, 92%, 95%)`;
+    const lightBorder = `hsl(${hue}, 75%, 40%)`;
+    const lightText = `hsl(${hue}, 92%, 18%)`;
+
+    const darkBg = `hsla(${hue}, 65%, 26%, 0.38)`;
+    const darkBorder = `hsl(${hue}, 70%, 55%)`;
+    const darkText = `hsl(${hue}, 85%, 85%)`;
+
     return {
-      ...pal,
-      bg: isDarkMode ? pal.darkBg : pal.bg,
-      text: isDarkMode ? pal.darkText : pal.text
+      hue,
+      symbol,
+      border: isDarkMode ? darkBorder : lightBorder,
+      bg: isDarkMode ? darkBg : lightBg,
+      text: isDarkMode ? darkText : lightText,
+      dot: isDarkMode ? darkBorder : lightBorder
     };
   };
 
@@ -1260,20 +1264,14 @@ function App() {
               />
               {hasEmpColor && (
                 <span 
-                  className="emp-signature-dot"
+                  className="emp-signature-symbol"
                   style={{
-                    position: 'absolute',
-                    left: '8px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: empColor.border,
-                    pointerEvents: 'none'
+                    color: empColor.border
                   }}
-                  title={`צבע זיהוי של ${slot.employee}`}
-                />
+                  title={`צבע וסמל זיהוי: ${empColor.symbol} (${slot.employee})`}
+                >
+                  {empColor.symbol}
+                </span>
               )}
             </div>
             {isConflict && <span className="overlap-conflict-badge">חפיפה!</span>}
@@ -1800,7 +1798,7 @@ function App() {
                               color: col.text 
                             }}
                           >
-                            <span className="legend-dot" style={{ backgroundColor: col.border }} />
+                            <span className="legend-symbol" style={{ color: col.border }}>{col.symbol}</span>
                             <span className="legend-emp-name">{emp}</span>
                           </span>
                         );
