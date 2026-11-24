@@ -7,7 +7,7 @@ import {
   ChevronRight, ChevronLeft, CalendarDays, Sunrise, Sunset,
   Cloud, Database, Settings, Check, X, ExternalLink, Share2,
   Send, Sparkles, Menu, ClipboardList, UserPlus, Smartphone,
-  Lock, KeyRound
+  Lock, KeyRound, Megaphone, Edit3
 } from 'lucide-react';
 import initialSchedule from './schedule.json';
 import initialStaff from './staff.json';
@@ -28,7 +28,9 @@ import {
   subscribeToSubmissions,
   saveSubmissionsToCloud,
   saveSingleSubmissionToCloud,
-  deleteSubmissionFromCloud
+  deleteSubmissionFromCloud,
+  subscribeToManagerMessage,
+  saveManagerMessageToCloud
 } from './firebase.js';
 import './App.css';
 
@@ -109,10 +111,58 @@ function isToday(d) {
          d.getFullYear() === today.getFullYear();
 }
 
+const DEFAULT_MANAGER_MESSAGE = {
+  text: 'השבוע מי שימכור 10 קוקטיילים ביום יקבל 50 שקלים בונוס! 🍹🔥 שבוע מוצלח ומלא מכירות לכולם!',
+  active: true,
+  updatedAt: null,
+  author: 'הנהלה'
+};
+
+const PRESET_MESSAGES = [
+  {
+    title: '🍹 10 קוקטיילים = 50 ₪ בונוס',
+    text: 'השבוע מי שימכור 10 קוקטיילים ביום יקבל 50 שקלים בונוס במזומן! 🍹🔥 בואו ניתן בראש!'
+  },
+  {
+    title: '⭐ מלצר מצטיין השבוע',
+    text: '⭐ תחרות מלצר מצטיין: המלצר שיקבל הכי הרבה פידבקים מעולים ושירות ללא דופי יזכה בארוחה זוגית מפנקת!'
+  },
+  {
+    title: '🍰 מבצע קינוחים שבועי',
+    text: '🍰 מבצע מתוקים: כל מלצר שמוכר 8 קינוחים במשמרת מקבל בונוס 40 ₪ ישירות למשכורת!'
+  },
+  {
+    title: '💰 הגדלת שולחנות ויין',
+    text: '💰 אתגר שבועי: שולחן מעל 400 ₪ מזכה ב-15 ₪ בונוס אישי למלצר! להמליץ על מנות פתיחה ויין משובח 🍷'
+  },
+  {
+    title: '🎯 יעד צוותי מנצח',
+    text: '🎯 יעד שבועי: עבודת צוות, עזרה הדדית וחיוך לכל לקוח! עמידה ביעד תזכה את כל הצוות בפינוק מיוחד בסופ"ש 🍕🎉'
+  }
+];
+
 function App() {
   const [currentView, setCurrentView] = useState('employees'); 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
+
+  // Manager Announcement & Sales Incentive State
+  const [managerMessage, setManagerMessage] = useState(() => {
+    try {
+      const saved = localStorage.getItem('shiftApp_managerMessage');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_MANAGER_MESSAGE;
+  });
+  const [isManagerMessageModalOpen, setIsManagerMessageModalOpen] = useState(false);
+  const [messageInputText, setMessageInputText] = useState(managerMessage?.text || '');
+  const [isMessageActive, setIsMessageActive] = useState(managerMessage?.active ?? true);
+  const [isSavingMessage, setIsSavingMessage] = useState(false);
+  const [hasCopiedShareLink, setHasCopiedShareLink] = useState(false);
+  const [hasCopiedLinkOnly, setHasCopiedLinkOnly] = useState(false);
 
   // Export / Image Preview State (Cross-Platform & iPad Compatible)
   const [isExporting, setIsExporting] = useState(false);
@@ -464,11 +514,22 @@ function App() {
       }
     });
 
+    // 5. Subscribe to manager message / announcement in Firestore
+    const unsubManagerMsg = subscribeToManagerMessage((cloudMsg) => {
+      if (cloudMsg) {
+        setManagerMessage(cloudMsg);
+        setMessageInputText(cloudMsg.text || '');
+        setIsMessageActive(cloudMsg.active ?? true);
+        localStorage.setItem('shiftApp_managerMessage', JSON.stringify(cloudMsg));
+      }
+    });
+
     return () => {
       if (unsubSchedule) unsubSchedule();
       if (unsubStaff) unsubStaff();
       if (unsubArchives) unsubArchives();
       if (unsubSubmissions) unsubSubmissions();
+      if (unsubManagerMsg) unsubManagerMsg();
     };
   }, [isCloudConnected]);
 
@@ -684,6 +745,68 @@ function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updatedList)
     }).catch(() => {});
+  };
+
+  // Save Manager Message to Cloud & LocalStorage
+  const handleSaveManagerMessage = async (e) => {
+    if (e) e.preventDefault();
+    if (!messageInputText.trim() && isMessageActive) {
+      alert('אנא הזן תוכן להודעה או בטל את הפעלתה.');
+      return;
+    }
+
+    setIsSavingMessage(true);
+    const updated = {
+      text: messageInputText.trim(),
+      active: isMessageActive,
+      updatedAt: new Date().toISOString(),
+      author: 'הנהלה'
+    };
+    setManagerMessage(updated);
+    localStorage.setItem('shiftApp_managerMessage', JSON.stringify(updated));
+
+    const res = await saveManagerMessageToCloud(updated);
+    setIsSavingMessage(false);
+    if (res && res.success) {
+      setIsManagerMessageModalOpen(false);
+      alert('🟢 הודעת המנהל נשמרה ופורסמה בהצלחה לכל הצוות בזמן אמת!');
+    } else {
+      setIsManagerMessageModalOpen(false);
+      alert('ההודעה נשמרה מקומית במכשיר זה. (הערה: לשמירה בענן ודא חיבור תקין ב-Firebase).');
+    }
+  };
+
+  // Share direct link & message with waiters via WhatsApp
+  const handleShareWithWaiters = () => {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const waiterUrl = `${baseUrl}?view=submit`;
+    const messageContent = (managerMessage?.active && managerMessage?.text) 
+      ? managerMessage.text 
+      : (messageInputText || 'שבוע טוב ומלא הצלחה ומכירות!');
+    
+    const shareText = `📢 *הודעת הנהלה ודרבון מכירות לצוות המלצרים!* 🍹🔥\n\n${messageContent}\n\n👉 *כניסה להגשת משמרות לשבוע הקרוב:* \n${waiterUrl}`;
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareText).then(() => {
+        setHasCopiedShareLink(true);
+        setTimeout(() => setHasCopiedShareLink(false), 3000);
+      });
+    }
+
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
+  // Copy direct waiter link only
+  const handleCopyWaiterLinkOnly = () => {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const waiterUrl = `${baseUrl}?view=submit`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(waiterUrl).then(() => {
+        setHasCopiedLinkOnly(true);
+        setTimeout(() => setHasCopiedLinkOnly(false), 3000);
+      });
+    }
   };
 
   // Handler: Smart auto-assign from submission to schedule
@@ -1698,6 +1821,7 @@ function App() {
           onSaveSubmission={handleSaveSubmission}
           existingSubmissions={submissions}
           isStandalone={true}
+          managerMessage={managerMessage}
         />
       </div>
     );
@@ -1815,6 +1939,32 @@ function App() {
             <Send size={20} />
             <span>הגשת משמרות</span>
             <div className="badge" style={{ background: '#2563eb', color: '#fff' }}>נייד 📱</div>
+          </button>
+
+          {/* Manager Message & Waiter Incentive Button */}
+          <button 
+            type="button"
+            className="nav-item manager-message-nav-btn"
+            onClick={() => { setIsManagerMessageModalOpen(true); setIsMobileMenuOpen(false); }}
+            style={{ 
+              background: managerMessage?.active ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(239, 68, 68, 0.15) 100%)' : 'rgba(245, 158, 11, 0.05)',
+              color: 'var(--text-dark)',
+              border: managerMessage?.active ? '1.5px solid #f59e0b' : '1px dashed var(--card-border)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}
+            title="הגדר הודעת מנהל ובונוס מכירות למלצרים"
+          >
+            <Megaphone size={20} color="#f59e0b" />
+            <span style={{ fontWeight: 700 }}>הודעת מנהל ובונוס</span>
+            <div className="badge" style={{ 
+              background: managerMessage?.active ? '#f59e0b' : '#6b7280', 
+              color: '#fff', 
+              fontSize: '0.72rem' 
+            }}>
+              {managerMessage?.active ? 'פעיל 📢' : 'כבוי'}
+            </div>
           </button>
 
           <button 
@@ -1984,6 +2134,45 @@ function App() {
             </ul>
           </div>
         )}
+
+        {/* Manager Weekly Announcement & Waiter Incentive Banner */}
+        <div className="manager-announcement-banner">
+          <div className="manager-announcement-content">
+            <div className="manager-announcement-badge">
+              <Megaphone size={18} />
+              <span>הודעת מנהל ובונוס שבועי למלצרים:</span>
+            </div>
+            <p className="manager-announcement-text">
+              {managerMessage?.active && managerMessage?.text ? (
+                managerMessage.text
+              ) : (
+                <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  טרם הוגדרה הודעת מנהל לשבוע זה. לחץ על "ערוך הודעה" להגדרת בונוס או אתגר מכירות למלצרים!
+                </span>
+              )}
+            </p>
+          </div>
+          <div className="manager-announcement-actions">
+            <button 
+              type="button" 
+              className="btn-edit-manager-msg"
+              onClick={() => setIsManagerMessageModalOpen(true)}
+              title="ערוך הודעת מנהל או בחר תבנית בונוס"
+            >
+              <Edit3 size={15} />
+              <span>ערוך הודעה</span>
+            </button>
+            <button 
+              type="button" 
+              className="btn-share-manager-msg"
+              onClick={handleShareWithWaiters}
+              title="שתף קישור הגשת משמרות עם הודעת הבונוס בווטסאפ של המלצרים"
+            >
+              <Share2 size={15} />
+              <span>{hasCopiedShareLink ? 'הועתק ושותף! ✓' : 'שלח לוואטסאפ'}</span>
+            </button>
+          </div>
+        </div>
 
         {/* Employee Dashboard View */}
         {currentView === 'employees' && (
@@ -2531,6 +2720,8 @@ function App() {
             onBackToSchedule={() => setCurrentView('מסעדה')}
             currentCategory={CATEGORIES.includes(currentView) ? currentView : 'מסעדה'}
             waiterShiftStats={waiterShiftStats}
+            managerMessage={managerMessage}
+            onOpenManagerMessageModal={() => setIsManagerMessageModalOpen(true)}
           />
         )}
 
@@ -2542,6 +2733,7 @@ function App() {
             onSaveSubmission={handleSaveSubmission}
             existingSubmissions={submissions}
             onBackToSchedule={() => setCurrentView('מסעדה')}
+            managerMessage={managerMessage}
           />
         )}
         
@@ -3144,7 +3336,164 @@ function App() {
             </div>
           </div>
         )}
-        {/* Mobile Bottom Navigation Bar */}
+
+        {/* MODAL: MANAGER MESSAGE & SALES INCENTIVE */}
+        {isManagerMessageModalOpen && (
+          <div className="modal-backdrop" onClick={() => setIsManagerMessageModalOpen(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} dir="rtl" style={{ maxWidth: '620px' }}>
+              <div className="modal-header" style={{ borderBottom: '2px solid #f59e0b' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Megaphone size={24} style={{ color: '#f59e0b' }} />
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '1.25rem' }}>הודעת מנהל ודרבון מכירות למלצרים 🍹🔥</h2>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                      הודעה זו תוצג בצורה בולטת לכל מלצר שיפתח את קישור הגשת המשמרות השבועי!
+                    </span>
+                  </div>
+                </div>
+                <button className="modal-close-btn" onClick={() => setIsManagerMessageModalOpen(false)}>✕</button>
+              </div>
+
+              <form onSubmit={handleSaveManagerMessage}>
+                <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  
+                  {/* Active Toggle Switch */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    background: isMessageActive ? 'rgba(245, 158, 11, 0.12)' : 'rgba(0, 0, 0, 0.05)',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: isMessageActive ? '1.5px solid #f59e0b' : '1px solid var(--card-border)'
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>
+                        {isMessageActive ? '🟢 הודעת המנהל פעילה ומוצגת למלצרים' : '⚪ ההודעה מנוטרלת כרגע (מוסתרת מהמלצרים)'}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        כבה אפשרות זו אם אינך רוצה להציג שום בונוס או הודעה השבוע.
+                      </div>
+                    </div>
+                    <label className="switch" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={isMessageActive}
+                        onChange={(e) => setIsMessageActive(e.target.checked)}
+                        style={{ width: '22px', height: '22px', cursor: 'pointer' }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Message Textarea */}
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px', fontSize: '0.92rem' }}>
+                      תוכן ההודעה והבונוס השבועי:
+                    </label>
+                    <textarea 
+                      className="manager-msg-textarea"
+                      rows={4}
+                      value={messageInputText}
+                      onChange={(e) => setMessageInputText(e.target.value)}
+                      placeholder="לדוגמה: השבוע מי שימכור 10 קוקטיילים ביום יקבל 50 שקלים בונוס במזומן! 🍹🔥 שבוע מוצלח לכולם!"
+                      style={{ 
+                        width: '100%', 
+                        padding: '12px', 
+                        fontSize: '0.95rem', 
+                        borderRadius: '10px', 
+                        border: '1.5px solid var(--card-border)',
+                        background: 'var(--input-bg)',
+                        color: 'var(--input-text)',
+                        resize: 'vertical',
+                        lineHeight: 1.5,
+                        fontFamily: 'inherit'
+                      }}
+                    />
+                  </div>
+
+                  {/* Quick Preset Templates */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                      <Sparkles size={16} style={{ color: '#f59e0b' }} />
+                      <span style={{ fontSize: '0.88rem', fontWeight: 'bold', color: 'var(--text-dark)' }}>
+                        תבניות מהירות לדרבון מכירות (לחץ לבחירה):
+                      </span>
+                    </div>
+                    <div className="preset-chips-grid">
+                      {PRESET_MESSAGES.map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          className="preset-chip-btn"
+                          onClick={() => {
+                            setMessageInputText(preset.text);
+                            setIsMessageActive(true);
+                          }}
+                        >
+                          {preset.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Live Preview Box */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(239, 68, 68, 0.08) 100%)',
+                    border: '1.5px dashed #f59e0b',
+                    borderRadius: '12px',
+                    padding: '12px 16px'
+                  }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#b45309', marginBottom: '4px' }}>
+                      👀 תצוגה מקדימה - כך המלצרים יראו זאת בטלפון:
+                    </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-dark)' }}>
+                      {messageInputText.trim() || 'אין תוכן להודעה עדיין...'}
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      type="button" 
+                      className="btn-secondary"
+                      onClick={handleCopyWaiterLinkOnly}
+                      title="העתק קישור הגשה ישיר למלצרים"
+                      style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Share2 size={15} />
+                      <span>{hasCopiedLinkOnly ? 'קישור הועתק! ✓' : 'העתק קישור מלצרים'}</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn-share-manager-msg"
+                      onClick={handleShareWithWaiters}
+                      title="שלח ישירות לקבוצת הווטסאפ של המלצרים"
+                      style={{ fontSize: '0.85rem' }}
+                    >
+                      <Share2 size={15} />
+                      <span>{hasCopiedShareLink ? 'הועתק ושותף! ✓' : 'שתף בווטסאפ'}</span>
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button type="button" className="btn-secondary" onClick={() => setIsManagerMessageModalOpen(false)}>ביטול</button>
+                    <button 
+                      type="submit" 
+                      className="btn-primary"
+                      disabled={isSavingMessage}
+                      style={{ background: '#f59e0b', borderColor: '#d97706', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Save size={16} />
+                      <span>{isSavingMessage ? 'שומר ומפרסם...' : 'שמור ופרסם לצוות 📢'}</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
         <div className="mobile-bottom-nav">
           <button 
             type="button"

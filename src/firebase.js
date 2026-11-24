@@ -302,3 +302,47 @@ export const deleteSubmissionFromCloud = async (employeeName) => {
     console.error('Error deleting submission from cloud:', err);
   }
 };
+
+// Real-time listener for manager announcement / message
+export const subscribeToManagerMessage = (callback, onError) => {
+  const database = getDb();
+  if (!database) return null;
+
+  try {
+    const docRef = doc(database, 'announcements', 'current');
+    return onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        callback(docSnap.data());
+      } else {
+        callback(null);
+      }
+    }, (error) => {
+      console.warn('Firestore manager message listener error:', error);
+      if (onError) onError(error);
+    });
+  } catch (e) {
+    console.error('Failed to subscribe to manager message:', e);
+    if (onError) onError(e);
+    return null;
+  }
+};
+
+// Save manager message / announcement to Firestore
+export const saveManagerMessageToCloud = async (messageData) => {
+  const database = getDb();
+  if (!database) return { success: false, error: 'Database not initialized' };
+
+  try {
+    const docRef = doc(database, 'announcements', 'current');
+    const timestamp = new Date().toISOString();
+    const dataToSave = {
+      ...messageData,
+      updatedAt: timestamp
+    };
+    await setDoc(docRef, dataToSave, { merge: true });
+    return { success: true, updatedAt: timestamp };
+  } catch (err) {
+    console.error('Error saving manager message to Firebase:', err);
+    return { success: false, error: err };
+  }
+};

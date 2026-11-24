@@ -3635,3 +3635,245 @@ body.dark-mode .unrequested-summary-sub {
 
 
 
+
+
+/* ==========================================================================
+   MANAGER ANNOUNCEMENT & WAITER SALES INCENTIVE STYLES
+   ========================================================================== */
+
+/* 1. Main Dashboard Banner for Manager */
+.manager-announcement-banner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(239, 68, 68, 0.08) 100%);
+  border: 1.5px solid #f59e0b;
+  border-radius: 12px;
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.08);
+}
+
+body.dark-mode .manager-announcement-banner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(239, 68, 68, 0.15) 100%);
+  border-color: #fbbf24;
+}
+
+.manager-announcement-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.manager-announcement-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: #b45309;
+}
+
+body.dark-mode .manager-announcement-badge {
+  color: #fbbf24;
+}
+
+.manager-announcement-text {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.manager-announcement-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.btn-edit-manager-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  color: #b45309;
+  border: 1.5px solid #f59e0b;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+body.dark-mode .btn-edit-manager-msg {
+  background: #1f2937;
+  color: #fbbf24;
+  border-color: #fbbf24;
+}
+
+.btn-edit-manager-msg:hover {
+  background: #f59e0b;
+  color: #ffffff;
+}
+
+.btn-share-manager-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #10b981;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-share-manager-msg:hover {
+  background: #059669;
+}
+
+/* 2. Waiter Incentive Card (Inside Waiter Submission Portal & Link) */
+.waiter-manager-incentive-card {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 40%, #fee2e2 100%);
+  border: 2px solid #f59e0b;
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin: 14px 0 20px 0;
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.15);
+  animation: pulse-border 2.5s infinite ease-in-out;
+}
+
+body.dark-mode .waiter-manager-incentive-card {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(239, 68, 68, 0.15) 100%);
+  border-color: #fbbf24;
+}
+
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.waiter-incentive-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.waiter-incentive-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f59e0b;
+  color: #ffffff;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.waiter-incentive-author {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #92400e;
+}
+
+body.dark-mode .waiter-incentive-author {
+  color: #fde68a;
+}
+
+.waiter-incentive-body {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #78350f;
+  line-height: 1.5;
+  margin: 4px 0;
+}
+
+body.dark-mode .waiter-incentive-body {
+  color: #fef3c7;
+}
+
+.waiter-incentive-footer {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #b45309;
+  margin-top: 6px;
+}
+
+body.dark-mode .waiter-incentive-footer {
+  color: #fcd34d;
+}
+
+/* 3. Preset Chips Grid in Modal */
+.preset-chips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.preset-chip-btn {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  text-align: right;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.preset-chip-btn:hover {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: #f59e0b;
+  color: #b45309;
+  transform: translateY(-1px);
+}
+
+body.dark-mode .preset-chip-btn:hover {
+  color: #fbbf24;
+}
+
+/* 4. Responsive Adjustments */
+@media (max-width: 768px) {
+  .manager-announcement-banner {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 14px;
+    gap: 12px;
+  }
+
+  .manager-announcement-actions {
+    justify-content: flex-end;
+  }
+
+  .btn-edit-manager-msg,
+  .btn-share-manager-msg {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .waiter-manager-incentive-card {
+    padding: 12px 14px;
+  }
+
+  .waiter-incentive-body {
+    font-size: 0.95rem;
+  }
+
+  .preset-chips-grid {
+    grid-template-columns: 1fr;
+  }
+}

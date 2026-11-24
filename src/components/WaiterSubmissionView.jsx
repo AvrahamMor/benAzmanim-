@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Clock, Check, Send, Sun, Moon, Sparkles, User, 
-  AlertCircle, Plus, CheckCircle2, RotateCcw, ArrowRight, Utensils
+  AlertCircle, Plus, CheckCircle2, RotateCcw, ArrowRight, Utensils,
+  Megaphone
 } from 'lucide-react';
 
 export default function WaiterSubmissionView({ 
@@ -10,7 +11,8 @@ export default function WaiterSubmissionView({
   onSaveSubmission, 
   existingSubmissions = [], 
   onBackToSchedule,
-  isStandalone = false
+  isStandalone = false,
+  managerMessage = null
 }) {
   const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'מוצ"ש'];
 
@@ -227,6 +229,26 @@ export default function WaiterSubmissionView({
           </button>
         )}
       </header>
+
+      {/* Manager Announcement & Sales Incentive Banner for Waiters */}
+      {managerMessage?.active && managerMessage?.text && (
+        <div className="waiter-manager-incentive-card">
+          <div className="incentive-card-header">
+            <div className="incentive-badge">
+              <span className="incentive-icon">🍹</span>
+              <strong>הודעת מנהל ובונוס השבוע לצוות! 🔥</strong>
+            </div>
+            {managerMessage.updatedAt && (
+              <span className="incentive-date">
+                עודכן: {new Date(managerMessage.updatedAt).toLocaleDateString('he-IL', { weekday: 'long', day: '2-digit', month: '2-digit' })}
+              </span>
+            )}
+          </div>
+          <div className="incentive-card-text">
+            {managerMessage.text}
+          </div>
+        </div>
+      )}
 
       {/* SUCCESS SCREEN */}
       {isSubmitted && submissionSuccessInfo ? (

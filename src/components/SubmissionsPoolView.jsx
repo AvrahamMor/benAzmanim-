@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import {
   Users, CheckCircle2, Clock, Calendar, Search, Filter,
   Send, Sparkles, Sun, Moon, Trash2, Edit3, Plus,
-  Share2, ArrowRight, Check, AlertTriangle, UserPlus, ChevronDown, ChevronUp
+  Share2, ArrowRight, Check, AlertTriangle, UserPlus, ChevronDown, ChevronUp,
+  Megaphone
 } from 'lucide-react';
 
 export default function SubmissionsPoolView({
@@ -13,7 +14,9 @@ export default function SubmissionsPoolView({
   onAutoAssignToSchedule,
   onBackToSchedule,
   currentCategory = 'מסעדה',
-  waiterShiftStats
+  waiterShiftStats,
+  managerMessage = null,
+  onOpenManagerMessageModal
 }) {
   const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'מוצ"ש'];
 
@@ -64,11 +67,13 @@ export default function SubmissionsPoolView({
   const handleCopyWhatsAppReminder = () => {
     const currentUrl = window.location.origin + window.location.pathname + '?view=submit';
     const missingNamesList = missingStaff.map(s => `• ${s.name}`).join('\n');
+    const managerIncentiveSnippet = (managerMessage?.active && managerMessage?.text)
+      ? `\n🍹 *הודעת מנהל ומבצע השבוע לצוות:* \n${managerMessage.text}\n`
+      : '';
 
     const message = `היי צוות יקר! 👋
 אפשר להתחיל לשלוח משמרות לשבוע הקרוב דרך הקישור הנוח:
-${currentUrl}
-
+${currentUrl}${managerIncentiveSnippet}
 ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמרות (${missingStaff.length}):\n${missingNamesList}\n\nנא לשלוח בהקדם לסגירת סידור העבודה!` : 'כל הכבוד! כולם הגישו משמרות.'}`;
 
     navigator.clipboard.writeText(message).then(() => {
@@ -169,6 +174,28 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
               <span>הודעת תזכורת לווטסאפ 💬</span>
             </button>
 
+            {onOpenManagerMessageModal && (
+              <button
+                type="button"
+                onClick={onOpenManagerMessageModal}
+                className="btn-pool-action btn-manager-msg"
+                style={{
+                  background: managerMessage?.active ? 'rgba(245, 158, 11, 0.15)' : 'var(--card-bg)',
+                  borderColor: managerMessage?.active ? '#f59e0b' : 'var(--card-border)',
+                  color: managerMessage?.active ? (document.body.classList.contains('dark-mode') ? '#fef08a' : '#78350f') : 'var(--text-dark)'
+                }}
+                title="ערוך הודעת מנהל, בונוס שבועי ומבצעים למלצרים"
+              >
+                <Megaphone size={16} style={{ color: '#f59e0b' }} />
+                <span>הודעת מנהל ובונוס</span>
+                {managerMessage?.active ? (
+                  <span className="pool-dot-active" style={{ background: '#10b981', width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block' }} />
+                ) : (
+                  <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>(+ חדש)</span>
+                )}
+              </button>
+            )}
+
             {onBackToSchedule && (
               <button
                 type="button"
@@ -181,6 +208,37 @@ ${missingStaff.length > 0 ? `⏳ חברים שעדיין לא הגישו משמ�
             )}
           </div>
         </div>
+
+        {/* Manager Incentive Preview inside Pool */}
+        {managerMessage?.active && managerMessage?.text && (
+          <div className="pool-manager-announcement-bar" style={{
+            background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+            border: '1.5px solid #f59e0b',
+            borderRadius: '10px',
+            padding: '10px 16px',
+            marginTop: '14px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#78350f', fontSize: '0.92rem' }}>
+              <span style={{ fontSize: '1.2rem' }}>🍹</span>
+              <strong>מוצג כעת בקישור המלצרים:</strong>
+              <span style={{ fontWeight: '500' }}>{managerMessage.text}</span>
+            </div>
+            {onOpenManagerMessageModal && (
+              <button 
+                type="button" 
+                onClick={onOpenManagerMessageModal}
+                style={{ background: '#fff', border: '1px solid #f59e0b', color: '#78350f', borderRadius: '6px', padding: '4px 10px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                ערוך הודעה ✏️
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Stats Strip */}
         <div className="pool-stats-strip">
