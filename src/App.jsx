@@ -233,6 +233,28 @@ function App() {
 
   const weekDates = useMemo(() => getWeekDates(currentSunday), [currentSunday]);
 
+  // Target Week for Waiter Submissions (Defaults to NEXT WEEK = +1 so waiters always submit for upcoming week)
+  // Synced via announcements/current in Firestore so manager can adjust if needed without ever affecting existing submissions
+  const submissionWeekMode = managerMessage?.submissionWeekMode || 'next';
+  const submissionWeekOffset = submissionWeekMode === 'current' ? 0 : submissionWeekMode === 'next2' ? 2 : 1;
+
+  const submissionWeekDates = useMemo(() => {
+    const sun = getSundayOfWeek(new Date());
+    sun.setDate(sun.getDate() + submissionWeekOffset * 7);
+    return getWeekDates(sun);
+  }, [submissionWeekOffset]);
+
+  const handleChangeSubmissionWeekMode = async (newMode) => {
+    const updated = {
+      ...(managerMessage || DEFAULT_MANAGER_MESSAGE),
+      submissionWeekMode: newMode,
+      updatedAt: new Date().toISOString()
+    };
+    setManagerMessage(updated);
+    localStorage.setItem('shiftApp_managerMessage', JSON.stringify(updated));
+    await saveManagerMessageToCloud(updated);
+  };
+
   // Robust Cross-Platform Export Function (Supports iPadOS, iOS Safari, Android & Desktop)
   const exportElementAsImage = async (elementId, title, fileName) => {
     const target = document.getElementById(elementId);
@@ -757,6 +779,7 @@ function App() {
 
     setIsSavingMessage(true);
     const updated = {
+      ...(managerMessage || {}),
       text: messageInputText.trim(),
       active: isMessageActive,
       updatedAt: new Date().toISOString(),
@@ -783,8 +806,11 @@ function App() {
     const messageContent = (managerMessage?.active && managerMessage?.text) 
       ? managerMessage.text 
       : (messageInputText || 'שבוע טוב ומלא הצלחה ומכירות!');
+    const weekLabel = submissionWeekDates && submissionWeekDates.length === 7
+      ? `(${formatDateShort(submissionWeekDates[0])} - ${formatDateShort(submissionWeekDates[6])})`
+      : '';
     
-    const shareText = `📢 *הודעת הנהלה ודרבון מכירות לצוות המלצרים!* 🍹🔥\n\n${messageContent}\n\n👉 *כניסה להגשת משמרות לשבוע הקרוב:* \n${waiterUrl}`;
+    const shareText = `📢 *הודעת הנהלה ודרבון מכירות לצוות המלצרים!* 🍹🔥\n\n${messageContent}\n\n👉 *כניסה להגשת משמרות לשבוע הקרוב ${weekLabel}:* \n${waiterUrl}`;
 
     if (navigator.clipboard) {
       navigator.clipboard.writeText(shareText).then(() => {
@@ -1817,7 +1843,7 @@ function App() {
       <div className={`standalone-submit-screen ${isDarkMode ? 'dark-mode' : ''}`} dir="rtl">
         <WaiterSubmissionView 
           staffList={allKnownEmployees}
-          weekDates={weekDates}
+          weekDates={submissionWeekDates}
           onSaveSubmission={handleSaveSubmission}
           existingSubmissions={submissions}
           isStandalone={true}
@@ -2714,7 +2740,9 @@ function App() {
           <SubmissionsPoolView 
             submissions={submissions}
             staffList={staffList}
-            weekDates={weekDates}
+            weekDates={submissionWeekDates}
+            submissionWeekMode={submissionWeekMode}
+            onChangeSubmissionWeekMode={handleChangeSubmissionWeekMode}
             onUpdateSubmissions={handleUpdateSubmissions}
             onAutoAssignToSchedule={handleAutoAssignToSchedule}
             onBackToSchedule={() => setCurrentView('מסעדה')}
@@ -2729,7 +2757,7 @@ function App() {
         {currentView === 'submit-portal' && (
           <WaiterSubmissionView 
             staffList={allKnownEmployees}
-            weekDates={weekDates}
+            weekDates={submissionWeekDates}
             onSaveSubmission={handleSaveSubmission}
             existingSubmissions={submissions}
             onBackToSchedule={() => setCurrentView('מסעדה')}

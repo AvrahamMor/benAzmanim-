@@ -211,7 +211,7 @@ export default function WaiterSubmissionView({
             <h1 className="submission-title">הגשת משמרות שבועית</h1>
             <p className="submission-subtitle">
               {weekDates && weekDates.length === 7 ? (
-                <>שבוע {getDayShortDate(0)} — {getDayShortDate(6)}</>
+                <>עבור שבוע <strong>{getDayShortDate(0)} — {getDayShortDate(6)}</strong></>
               ) : 'מערכת שיבוץ ומשמרות'}
             </p>
           </div>
@@ -490,7 +490,11 @@ export default function WaiterSubmissionView({
               style={{ opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'wait' : 'pointer' }}
             >
               <Send size={20} />
-              <span>{isSubmitting ? 'שולח משמרות לענן...' : 'שליחת משמרות לשבוע זה 🚀'}</span>
+              <span>
+                {isSubmitting
+                  ? 'שולח משמרות לענן...'
+                  : `שליחת משמרות לשבוע ${weekDates && weekDates.length === 7 ? `${getDayShortDate(0)}–${getDayShortDate(6)}` : 'זה'} 🚀`}
+              </span>
             </button>
           </div>
 
