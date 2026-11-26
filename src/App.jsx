@@ -7,7 +7,7 @@ import {
   ChevronRight, ChevronLeft, CalendarDays, Sunrise, Sunset,
   Cloud, Database, Settings, Check, X, ExternalLink, Share2,
   Send, Sparkles, Menu, ClipboardList, UserPlus, Smartphone,
-  Lock, KeyRound, Megaphone, Edit3
+  Lock, KeyRound, Megaphone, Edit3, Search
 } from 'lucide-react';
 import initialSchedule from './schedule.json';
 import initialStaff from './staff.json';
@@ -168,6 +168,10 @@ function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [previewModal, setPreviewModal] = useState({ isOpen: false, imageUrl: '', title: '', fileName: '' });
 
+  // Expandable Available Waiters Picker for Schedule Matrix Cells & Day Headers
+  const [availPicker, setAvailPicker] = useState(null);
+  const [availPickerSearch, setAvailPickerSearch] = useState('');
+
   // Mobile & iPad Navigation Drawer & View State
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [mobileActiveDay, setMobileActiveDay] = useState('ראשון');
@@ -295,7 +299,7 @@ function App() {
 
             // Clean up any remaining interactive elements or badges that shouldn't appear in WhatsApp image
             clonedTarget.querySelectorAll(
-              '.clear-cell-btn, .quick-event-btn, .btn-quick-fill-chip, .slot-avail-hint, .emp-ratio-badge, .legend-ratio-pill, .day-available-count-badge'
+              '.clear-cell-btn, .quick-event-btn, .btn-quick-fill-chip, .btn-open-avail-picker, .slot-avail-hint, .emp-ratio-badge, .legend-ratio-pill, .day-available-count-badge'
             ).forEach(el => el.remove());
           }
         }
@@ -603,6 +607,29 @@ function App() {
     return { assigned, requested, getStats };
   }, [submissions, shifts]);
 
+  // Track which employees are already assigned on each day across all departments
+  const assignedOnDayMap = useMemo(() => {
+    const map = {};
+    DAYS.forEach(day => {
+      map[day] = {};
+      CATEGORIES.forEach(cat => {
+        (shifts[cat]?.[day] || []).forEach(slot => {
+          const emp = (slot.employee || '').trim();
+          if (emp) {
+            const key = emp.toLowerCase();
+            if (!map[day][key]) map[day][key] = [];
+            map[day][key].push({
+              category: cat,
+              start: slot.start || '',
+              end: slot.end || ''
+            });
+          }
+        });
+      });
+    });
+    return map;
+  }, [shifts]);
+
   // Available waiters grouped by day and shift type (derived from submissions)
   const availableWaitersByDay = useMemo(() => {
     const map = {};
@@ -620,16 +647,25 @@ function App() {
         if (d && !d.off) {
           const empName = sub.employeeName;
           const stat = waiterShiftStats.getStats(empName);
-          if (d.morning) map[day].morning.push({ name: empName, note: d.note, stat });
-          if (d.evening) map[day].evening.push({ name: empName, note: d.note, stat });
-          if (d.morning || d.evening) {
-            map[day].all.push({ 
-              name: empName, 
-              shifts: [d.morning && 'בוקר', d.evening && 'ערב'].filter(Boolean).join('/'),
-              note: d.note,
-              stat
-            });
-          }
+          const dayShiftType = d.morning && d.evening
+            ? 'both'
+            : d.morning
+            ? 'morning_only'
+            : d.evening
+            ? 'evening_only'
+            : 'none';
+          const info = {
+            name: empName,
+            note: d.note || '',
+            generalNote: sub.notes || '',
+            preferredCategory: sub.preferredCategory || 'מסעדה',
+            dayShiftType,
+            shifts: [d.morning && 'בוקר', d.evening && 'ערב'].filter(Boolean).join('/'),
+            stat
+          };
+          if (d.morning) map[day].morning.push(info);
+          if (d.evening) map[day].evening.push(info);
+          if (d.morning || d.evening) map[day].all.push(info);
         }
       });
     });
@@ -1640,8 +1676,10 @@ function App() {
     const isConflict = slot.hasOverlapConflict;
     const isEventRole = slot.role && slot.role.includes('אירוע');
 
-    const availableList = section === 'morning' 
+    const availableList = section === 'morning'
       ? (availableWaitersByDay[day]?.morning || [])
+      : section === 'mid'
+      ? (availableWaitersByDay[day]?.all || [])
       : (availableWaitersByDay[day]?.evening || []);
 
     const empColor = slot.employee ? getEmployeeColor(slot.employee) : null;
@@ -1812,23 +1850,33 @@ function App() {
             </div>
           )}
 
-          {!slot.employee && availableList.length > 0 && (
+          {!slot.employee && availableList.length > 0 && !isExporting && (
             <div className="slot-avail-hint">
-              <span className="avail-hint-label">זמינים:</span>
-              {availableList.slice(0, 2).map((w, wi) => {
-                const stat = w.stat || waiterShiftStats.getStats(w.name);
-                return (
-                  <button 
-                    key={wi}
-                    type="button" 
-                    className="btn-quick-fill-chip"
-                    onClick={() => updateShift(currentView, day, origIndex, 'employee', w.name)}
-                    title={`שבץ את ${w.name} (שובץ ${stat.fullLabel})${w.note ? ` (${w.note})` : ''}`}
-                  >
-                    + {w.name} <span className="chip-stat-num">({stat.label})</span>
-                  </button>
-                );
-              })}
+              <button
+                type="button"
+                className={`btn-open-avail-picker ${section === 'morning' ? 'picker-morning' : section === 'mid' ? 'picker-mid' : 'picker-evening'}`}
+                onClick={() => {
+                  setAvailPickerSearch('');
+                  setAvailPicker({
+                    mode: 'cell',
+                    category: currentView,
+                    day,
+                    section,
+                    origIndex,
+                    activeTab: section === 'morning' ? 'morning' : section === 'mid' ? 'all' : 'evening'
+                  });
+                }}
+                title={`פתח רשימת כל הפנויים ל${section === 'morning' ? 'בוקר' : section === 'mid' ? 'משמרת זו' : 'ערב'} ביום ${day} (${availableList.length} עובדים)`}
+              >
+                <Users size={12} />
+                <span>
+                  {section === 'morning'
+                    ? `☀️ זמינים לבוקר (${availableList.length}) ▾`
+                    : section === 'mid'
+                    ? `🌤️ זמינים היום (${availableList.length}) ▾`
+                    : `🌙 זמינים לערב (${availableList.length}) ▾`}
+                </span>
+              </button>
             </div>
           )}
         </div>
@@ -2497,12 +2545,24 @@ function App() {
                                 {today && <span className="today-star">⭐</span>}
                               </span>
                               {!isExporting && availWaiters.length > 0 && (
-                                <span 
-                                  className="day-available-count-badge" 
-                                  title={availWaiters.map(w => `${w.name} (${w.shifts})${w.note ? `: ${w.note}` : ''}`).join('\n')}
+                                <button
+                                  type="button"
+                                  className="day-available-count-badge clickable"
+                                  onClick={() => {
+                                    setAvailPickerSearch('');
+                                    setAvailPicker({
+                                      mode: 'day',
+                                      category: currentView,
+                                      day,
+                                      section: 'all',
+                                      origIndex: null,
+                                      activeTab: (availableWaitersByDay[day]?.morning?.length || 0) > 0 ? 'morning' : 'evening'
+                                    });
+                                  }}
+                                  title={`לחץ לפתיחת הרשימה המלאה של הפנויים ביום ${day} (בוקר וערב)`}
                                 >
-                                  👥 {availWaiters.length} פנויים
-                                </span>
+                                  👥 {availWaiters.length} פנויים ▾
+                                </button>
                               )}
                             </div>
                           </th>
@@ -3522,6 +3582,242 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* MODAL: AVAILABLE WAITERS PICKER FOR SHIFT / DAY */}
+        {availPicker && (() => {
+          const dayAvail = availableWaitersByDay[availPicker.day] || { morning: [], evening: [], all: [] };
+          const morningList = dayAvail.morning || [];
+          const eveningList = dayAvail.evening || [];
+          const allDayList = dayAvail.all || [];
+
+          const currentTabList =
+            availPicker.activeTab === 'morning'
+              ? morningList
+              : availPicker.activeTab === 'evening'
+              ? eveningList
+              : allDayList;
+
+          const q = availPickerSearch.trim().toLowerCase();
+          const matchingList = q
+            ? currentTabList.filter(w =>
+                (w.name || '').toLowerCase().includes(q) ||
+                (w.generalNote || '').toLowerCase().includes(q) ||
+                (w.note || '').toLowerCase().includes(q) ||
+                (w.preferredCategory || '').toLowerCase().includes(q)
+              )
+            : currentTabList;
+
+          const dayAssignments = assignedOnDayMap[availPicker.day] || {};
+
+          const freeWaiters = [];
+          const alreadyScheduledWaiters = [];
+          matchingList.forEach(w => {
+            const key = (w.name || '').trim().toLowerCase();
+            const existingToday = dayAssignments[key] || [];
+            if (existingToday.length > 0) {
+              alreadyScheduledWaiters.push({ ...w, existingToday });
+            } else {
+              freeWaiters.push({ ...w, existingToday: [] });
+            }
+          });
+
+          // Sort free waiters cleanly: dedicated (morning_only / evening_only) first, then fewest assigned
+          const sortFn = (a, b) => {
+            const aDed = a.dayShiftType !== 'both' ? 0 : 1;
+            const bDed = b.dayShiftType !== 'both' ? 0 : 1;
+            if (aDed !== bDed) return aDed - bDed;
+            const aAss = a.stat?.assigned || 0;
+            const bAss = b.stat?.assigned || 0;
+            if (aAss !== bAss) return aAss - bAss;
+            return (a.name || '').localeCompare(b.name || '', 'he');
+          };
+          freeWaiters.sort(sortFn);
+          alreadyScheduledWaiters.sort(sortFn);
+
+          const isCellMode = availPicker.mode === 'cell';
+
+          const renderPickerRow = (w, isAlreadyAssigned) => {
+            const stat = w.stat || waiterShiftStats.getStats(w.name);
+            const empColor = showEmployeeColors ? getEmployeeColor(w.name) : null;
+            const noteText = w.note || w.generalNote;
+
+            return (
+              <div
+                key={w.name}
+                className={`avail-picker-row ${isAlreadyAssigned ? 'is-already-assigned' : 'is-free'} ${isCellMode ? 'is-clickable' : ''}`}
+                onClick={() => {
+                  if (isCellMode) {
+                    updateShift(availPicker.category, availPicker.day, availPicker.origIndex, 'employee', w.name);
+                    setAvailPicker(null);
+                  }
+                }}
+              >
+                <div className="avail-picker-row-main">
+                  <div className="avail-picker-name-line">
+                    {empColor && (
+                      <span
+                        className="avail-picker-dot"
+                        style={{ backgroundColor: empColor.border }}
+                      />
+                    )}
+                    <span className="avail-picker-emp-name">{w.name}</span>
+
+                    <span className={`avail-pref-chip ${w.dayShiftType === 'morning_only' ? 'pref-morning' : w.dayShiftType === 'evening_only' ? 'pref-evening' : 'pref-both'}`}>
+                      {w.dayShiftType === 'morning_only'
+                        ? '☀️ רק בוקר'
+                        : w.dayShiftType === 'evening_only'
+                        ? '🌙 רק ערב'
+                        : '✨ בוקר וערב'}
+                    </span>
+
+                    {stat && stat.requested !== null && (
+                      <span className={`avail-stat-pill ${stat.assigned >= stat.requested ? 'stat-done' : 'stat-open'}`}>
+                        {stat.label}
+                      </span>
+                    )}
+
+                    <span className="avail-dept-mini">{w.preferredCategory}</span>
+                  </div>
+
+                  {isAlreadyAssigned && w.existingToday.length > 0 && (
+                    <div className="avail-already-tag">
+                      <AlertTriangle size={12} />
+                      <span>
+                        כבר משובץ היום ב:{' '}
+                        {w.existingToday.map(x => `${x.category}${x.start ? ` (${x.start}-${x.end})` : ''}`).join(', ')}
+                      </span>
+                    </div>
+                  )}
+
+                  {noteText && (
+                    <div className="avail-note-line">
+                      📝 {noteText}
+                    </div>
+                  )}
+                </div>
+
+                {isCellMode && (
+                  <button
+                    type="button"
+                    className={`btn-pick-waiter ${isAlreadyAssigned ? 'btn-pick-secondary' : 'btn-pick-primary'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updateShift(availPicker.category, availPicker.day, availPicker.origIndex, 'employee', w.name);
+                      setAvailPicker(null);
+                    }}
+                  >
+                    + שבץ
+                  </button>
+                )}
+              </div>
+            );
+          };
+
+          return (
+            <div className="modal-backdrop" onClick={() => setAvailPicker(null)}>
+              <div className="modal-content avail-picker-modal" onClick={e => e.stopPropagation()} dir="rtl">
+                <div className="modal-header avail-picker-header">
+                  <div>
+                    <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Users size={20} style={{ color: 'var(--primary-color)' }} />
+                      <span>פנויים לעבודה — יום {availPicker.day}</span>
+                    </h2>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+                      {isCellMode
+                        ? `לחץ על שם העובד לשיבוץ מיידי במחלקת "${availPicker.category}"`
+                        : `סקירת כל העובדים הזמינים לבוקר ולערב ביום ${availPicker.day}`}
+                    </p>
+                  </div>
+                  <button type="button" className="modal-close-btn" onClick={() => setAvailPicker(null)}>✕</button>
+                </div>
+
+                <div className="avail-picker-tabs">
+                  <button
+                    type="button"
+                    className={`avail-tab-btn tab-morning ${availPicker.activeTab === 'morning' ? 'active' : ''}`}
+                    onClick={() => setAvailPicker(prev => ({ ...prev, activeTab: 'morning' }))}
+                  >
+                    ☀️ זמינים לבוקר ({morningList.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`avail-tab-btn tab-evening ${availPicker.activeTab === 'evening' ? 'active' : ''}`}
+                    onClick={() => setAvailPicker(prev => ({ ...prev, activeTab: 'evening' }))}
+                  >
+                    🌙 זמינים לערב ({eveningList.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`avail-tab-btn tab-all ${availPicker.activeTab === 'all' ? 'active' : ''}`}
+                    onClick={() => setAvailPicker(prev => ({ ...prev, activeTab: 'all' }))}
+                  >
+                    📋 כל היום ({allDayList.length})
+                  </button>
+                </div>
+
+                {isCellMode && (
+                  (availPicker.section === 'morning' && availPicker.activeTab === 'evening') ||
+                  (availPicker.section === 'evening' && availPicker.activeTab === 'morning')
+                ) && (
+                  <div className="avail-mismatch-hint">
+                    <AlertTriangle size={15} />
+                    <span>
+                      שים לב: פתחת משבצת <strong>{availPicker.section === 'morning' ? 'בוקר' : 'ערב'}</strong>, וכרגע אתה צופה ברשימת <strong>{availPicker.activeTab === 'morning' ? 'הבוקר' : 'הערב'}</strong>.
+                    </span>
+                  </div>
+                )}
+
+                <div className="avail-picker-search-wrap">
+                  <Search size={16} />
+                  <input
+                    type="text"
+                    className="avail-picker-search-input"
+                    placeholder="חפש לפי שם עובד, מחלקה או הערה..."
+                    value={availPickerSearch}
+                    onChange={(e) => setAvailPickerSearch(e.target.value)}
+                    autoFocus
+                  />
+                  {availPickerSearch && (
+                    <button type="button" className="clear-search-btn" onClick={() => setAvailPickerSearch('')}>✕</button>
+                  )}
+                </div>
+
+                <div className="avail-picker-body">
+                  {matchingList.length === 0 ? (
+                    <div className="avail-picker-empty">
+                      <Users size={36} style={{ opacity: 0.35 }} />
+                      <p>לא נמצאו עובדים זמינים להצגה בסינון זה</p>
+                    </div>
+                  ) : (
+                    <>
+                      {freeWaiters.length > 0 && (
+                        <div className="avail-picker-group">
+                          <div className="avail-group-label label-free">
+                            🟢 פנויים וטרם שובצו היום ({freeWaiters.length})
+                          </div>
+                          <div className="avail-picker-list">
+                            {freeWaiters.map(w => renderPickerRow(w, false))}
+                          </div>
+                        </div>
+                      )}
+
+                      {alreadyScheduledWaiters.length > 0 && (
+                        <div className="avail-picker-group">
+                          <div className="avail-group-label label-busy">
+                            🟡 זמינים שכבר משובצים היום במשמרת אחרת ({alreadyScheduledWaiters.length})
+                          </div>
+                          <div className="avail-picker-list">
+                            {alreadyScheduledWaiters.map(w => renderPickerRow(w, true))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
         <div className="mobile-bottom-nav">
           <button 
             type="button"

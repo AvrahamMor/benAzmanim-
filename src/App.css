@@ -2966,6 +2966,7 @@ body.dark-mode .export-role-badge {
 .table-wrapper.is-exporting .quick-event-btn,
 .table-wrapper.is-exporting .slot-avail-hint,
 .table-wrapper.is-exporting .btn-quick-fill-chip,
+.table-wrapper.is-exporting .btn-open-avail-picker,
 .table-wrapper.is-exporting .emp-ratio-badge,
 .table-wrapper.is-exporting .legend-ratio-pill,
 .table-wrapper.is-exporting .day-available-count-badge,
@@ -4216,4 +4217,417 @@ body.dark-mode .sub-shift-type-pill.type-none {
 
 .day-badge-col.highlighted-day-col {
   box-shadow: 0 0 0 2px var(--primary-color);
+}
+
+
+/* ==========================================================================
+   EXPANDABLE AVAILABLE WAITERS PICKER (MATRIX CELLS & DAY HEADERS)
+   ========================================================================== */
+
+.btn-open-avail-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  border: 1.5px solid transparent;
+}
+
+.btn-open-avail-picker.picker-morning {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #b45309;
+}
+
+.btn-open-avail-picker.picker-morning:hover {
+  background: #f59e0b;
+  color: #ffffff;
+}
+
+body.dark-mode .btn-open-avail-picker.picker-morning {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fde68a;
+}
+
+body.dark-mode .btn-open-avail-picker.picker-morning:hover {
+  background: #f59e0b;
+  color: #0f172a;
+}
+
+.btn-open-avail-picker.picker-evening {
+  background: rgba(79, 70, 229, 0.12);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: #4338ca;
+}
+
+.btn-open-avail-picker.picker-evening:hover {
+  background: #4f46e5;
+  color: #ffffff;
+}
+
+body.dark-mode .btn-open-avail-picker.picker-evening {
+  background: rgba(99, 102, 241, 0.22);
+  color: #c7d2fe;
+}
+
+body.dark-mode .btn-open-avail-picker.picker-evening:hover {
+  background: #6366f1;
+  color: #ffffff;
+}
+
+.btn-open-avail-picker.picker-mid {
+  background: rgba(13, 148, 136, 0.12);
+  border-color: rgba(20, 184, 166, 0.45);
+  color: #0f766e;
+}
+
+.btn-open-avail-picker.picker-mid:hover {
+  background: #0d9488;
+  color: #ffffff;
+}
+
+body.dark-mode .btn-open-avail-picker.picker-mid {
+  background: rgba(20, 184, 166, 0.22);
+  color: #99f6e4;
+}
+
+.day-available-count-badge.clickable {
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.day-available-count-badge.clickable:hover {
+  background: #2563eb;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* Picker Modal */
+.avail-picker-modal {
+  max-width: 580px !important;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.avail-picker-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--card-border);
+  background: var(--bg-color);
+  flex-wrap: wrap;
+}
+
+.avail-tab-btn {
+  flex: 1;
+  min-width: 130px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-dark);
+  font-size: 0.86rem;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.avail-tab-btn.tab-morning.active {
+  background: #f59e0b;
+  border-color: #d97706;
+  color: #ffffff;
+}
+
+.avail-tab-btn.tab-evening.active {
+  background: #4f46e5;
+  border-color: #4338ca;
+  color: #ffffff;
+}
+
+.avail-tab-btn.tab-all.active {
+  background: #0d9488;
+  border-color: #0f766e;
+  color: #ffffff;
+}
+
+.avail-mismatch-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  background: rgba(245, 158, 11, 0.14);
+  color: #92400e;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+body.dark-mode .avail-mismatch-hint {
+  color: #fde68a;
+}
+
+.avail-picker-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 12px 20px 8px 20px;
+}
+
+.avail-picker-search-wrap svg {
+  position: absolute;
+  right: 32px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.avail-picker-search-wrap .clear-search-btn {
+  left: 30px;
+}
+
+.avail-picker-search-input {
+  width: 100%;
+  padding: 9px 36px 9px 32px;
+  border-radius: 10px;
+  border: 1.5px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-dark);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.avail-picker-body {
+  padding: 8px 20px 20px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.avail-picker-empty {
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--text-muted);
+}
+
+.avail-group-label {
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.avail-group-label.label-free {
+  background: rgba(16, 185, 129, 0.12);
+  color: #065f46;
+}
+
+body.dark-mode .avail-group-label.label-free {
+  color: #6ee7b7;
+}
+
+.avail-group-label.label-busy {
+  background: rgba(245, 158, 11, 0.12);
+  color: #92400e;
+}
+
+body.dark-mode .avail-group-label.label-busy {
+  color: #fde68a;
+}
+
+.avail-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.avail-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--card-border);
+  background: var(--bg-color);
+  transition: all 0.15s ease;
+}
+
+.avail-picker-row.is-clickable {
+  cursor: pointer;
+}
+
+.avail-picker-row.is-clickable:hover {
+  border-color: var(--primary-color);
+  background: var(--card-bg);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.avail-picker-row.is-already-assigned {
+  opacity: 0.78;
+}
+
+.avail-picker-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.avail-picker-name-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.avail-picker-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.avail-picker-emp-name {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: var(--text-dark);
+}
+
+.avail-pref-chip {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 12px;
+}
+
+.avail-pref-chip.pref-morning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+}
+
+body.dark-mode .avail-pref-chip.pref-morning {
+  color: #fcd34d;
+}
+
+.avail-pref-chip.pref-evening {
+  background: rgba(79, 70, 229, 0.12);
+  color: #4338ca;
+}
+
+body.dark-mode .avail-pref-chip.pref-evening {
+  color: #a5b4fc;
+}
+
+.avail-pref-chip.pref-both {
+  background: rgba(13, 148, 136, 0.14);
+  color: #0f766e;
+}
+
+body.dark-mode .avail-pref-chip.pref-both {
+  color: #5eead4;
+}
+
+.avail-stat-pill {
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+.avail-stat-pill.stat-open {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+body.dark-mode .avail-stat-pill.stat-open {
+  color: #fcd34d;
+}
+
+.avail-stat-pill.stat-done {
+  background: rgba(16, 185, 129, 0.16);
+  color: #047857;
+}
+
+body.dark-mode .avail-stat-pill.stat-done {
+  color: #6ee7b7;
+}
+
+.avail-dept-mini {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--card-bg);
+  padding: 1px 7px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+}
+
+.avail-already-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #b45309;
+}
+
+body.dark-mode .avail-already-tag {
+  color: #fcd34d;
+}
+
+.avail-note-line {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  background: rgba(59, 130, 246, 0.08);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+body.dark-mode .avail-note-line {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.16);
+}
+
+.btn-pick-waiter {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.84rem;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-pick-waiter.btn-pick-primary {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.btn-pick-waiter.btn-pick-primary:hover {
+  background: #059669;
+}
+
+.btn-pick-waiter.btn-pick-secondary {
+  background: var(--card-bg);
+  border: 1px solid #f59e0b;
+  color: #b45309;
+}
+
+body.dark-mode .btn-pick-waiter.btn-pick-secondary {
+  color: #fcd34d;
 }
